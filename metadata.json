@@ -1,0 +1,5 @@
+{
+  "name": "Teams SOP Bot Simulator",
+  "description": "A web application that simulates a Microsoft Teams bot designed to automate and manage complex Standard Operating Procedures (SOPs) for financial processes. It showcases features like configuration wizards, on-demand testing, results analysis, and production interventions through an interactive chat interface.",
+  "requestFramePermissions": []
+}
