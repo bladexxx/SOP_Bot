@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard } from './types';
 import { CardRenderer } from './components/CardRenderer';
-import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon } from './components/Icons';
+import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
+import { GoogleGenAI } from '@google/genai';
 
-const mockConfigs: Configuration[] = [
+const mockConfigsData: Configuration[] = [
   {
     projectName: 'Auto-billing',
     level: 'Project',
@@ -31,6 +32,35 @@ const mockConfigs: Configuration[] = [
     settings: { threshold: 250, autoApprove: false }
   },
   {
+    projectName: 'AutoVouch-DELL-TDS',
+    vendorId: 'DELL',
+    level: 'Vendor',
+    status: 'Active',
+    lastModified: '2024-01-15',
+    createdBy: 'user@example.com',
+    settings: {
+        bizCategory: "TDS",
+        countryCode: "US",
+        regionNo: "100",
+        transCode: "810",
+        fileType: "X12",
+        partnerName: "DELL",
+        vouchModel: "",
+        hasSAPOrder: "N",
+        skipAPVendors: "",
+        vouchVendors: "",
+        renewalCheck: "None",
+        renewalVendors: "",
+        transformation: [
+            {
+                method: "JOLT",
+                specFile: "dell_jolt_spec.json",
+                specDir: "/home/nifi/scripts/autovouch-scripts/jolt"
+            }
+        ]
+    }
+  },
+  {
     projectName: 'Q-Gen',
     vendorId: 'VEN-ABCDE',
     level: 'Vendor',
@@ -41,7 +71,7 @@ const mockConfigs: Configuration[] = [
   }
 ];
 
-const mockTemplates: ConfigTemplate[] = [
+const mockTemplatesData: ConfigTemplate[] = [
     {
         templateName: "Standard Auto-Billing Template",
         projectName: "Auto-billing",
@@ -52,12 +82,38 @@ const mockTemplates: ConfigTemplate[] = [
         }
     },
     {
-        templateName: "Standard AutoVouch Template",
-        projectName: "AutoVouch",
-        description: "For voucher generation with basic thresholding.",
+        templateName: "TDS AutoVouch Template",
+        projectName: "AutoVouch-TDS",
+        description: "For TDS X12 file transaction processing with JOLT transformations.",
         settingsSchema: {
-            threshold: 'number',
-            autoApprove: 'boolean',
+            bizCategory: 'string',
+            countryCode: 'string',
+            regionNo: 'string',
+            transCode: 'string',
+            fileType: 'string',
+            partnerName: 'string',
+            vouchModel: 'string',
+            hasSAPOrder: 'string',
+            skipAPVendors: 'string',
+            vouchVendors: 'string',
+            renewalCheck: 'string',
+            renewalVendors: 'string',
+            transformation: 'json',
+        },
+        defaultValues: {
+            bizCategory: "TDS",
+            countryCode: "US",
+            regionNo: "100",
+            fileType: "X12",
+            hasSAPOrder: "N",
+            renewalCheck: "None",
+            transformation: [
+                {
+                    method: "JOLT",
+                    specFile: "your_spec_file.json",
+                    specDir: "/home/nifi/scripts/autovouch-scripts/jolt"
+                }
+            ]
         }
     },
      {
@@ -115,16 +171,21 @@ const mockFlashcards: Flashcard[] = [
     },
     {
         id: 3,
+        question: "What are configuration templates?",
+        answer: "Templates provide a pre-defined structure for a project's configuration, tailored to its specific business logic. Using a template ensures all necessary settings are included right from the start."
+    },
+    {
+        id: 4,
         question: "How do I run a test for an existing project?",
         answer: "Type 'run test for [Project Name]', for example, 'run test for Auto-billing'. The bot will then ask you to select the specific configuration and provide test data."
     },
     {
-        id: 4,
+        id: 5,
         question: "How can I see the benchmark datasets for a project?",
         answer: "Type 'show benchmarks for [Project Name]', e.g., 'show benchmarks for AutoVouch'. The bot will display cards with details for each available benchmark."
     },
     {
-        id: 5,
+        id: 6,
         question: "How do I find a specific configuration?",
         answer: "Use the search bar at the top of the screen, or type a query like 'find VEN-12345' or 'check config for Auto-billing'."
     }
@@ -141,6 +202,10 @@ const App: React.FC = () => {
     const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLDivElement>(null);
+
+    const [configs, setConfigs] = useState<Configuration[]>(mockConfigsData);
+    const [templates, setTemplates] = useState<ConfigTemplate[]>(mockTemplatesData);
+    const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -165,7 +230,7 @@ const App: React.FC = () => {
     useEffect(() => {
         if (searchQuery.trim() !== '') {
             const lowerQuery = searchQuery.toLowerCase();
-            const filtered = mockConfigs.filter(config => 
+            const filtered = configs.filter(config => 
                 config.projectName.toLowerCase().includes(lowerQuery) ||
                 (config.vendorId && config.vendorId.toLowerCase().includes(lowerQuery))
             );
@@ -175,7 +240,7 @@ const App: React.FC = () => {
             setSearchResults([]);
             setShowSearchResults(false);
         }
-    }, [searchQuery]);
+    }, [searchQuery, configs]);
     
     const addMessage = useCallback((message: Omit<Message, 'id' | 'timestamp'>) => {
         const newMessage = { 
@@ -194,7 +259,7 @@ const App: React.FC = () => {
                     ...msg,
                     card: {
                         ...msg.card,
-                        payload: { ...msg.card.payload, ...newPayload }
+                        payload: newPayload
                     }
                 };
             }
@@ -210,11 +275,11 @@ const App: React.FC = () => {
         const words = lowerInput.replace(/[,.]/g, '').split(' ');
 
         if (lowerInput.includes('benchmark') || lowerInput.includes('golden')) {
-            const potentialProject = words.find(word => mockBenchmarkDatasets.some(b => b.projectName.toLowerCase() === word));
+            const potentialProject = words.find(word => benchmarks.some(b => b.projectName.toLowerCase() === word));
             const potentialVendor = words.find(word => word.toUpperCase().startsWith('VEN-'));
 
             if (potentialProject && potentialVendor) {
-                const projectBenchmarks = mockBenchmarkDatasets.filter(b => b.projectName.toLowerCase() === potentialProject);
+                const projectBenchmarks = benchmarks.filter(b => b.projectName.toLowerCase() === potentialProject);
                 let isCovered = false;
                 for (const benchmark of projectBenchmarks) {
                     if (benchmark.coveredVendors.some(v => v.toLowerCase() === potentialVendor)) {
@@ -226,7 +291,7 @@ const App: React.FC = () => {
                 addMessage({ actor: Actor.BOT, content: isCovered ? `Yes, vendor ${potentialVendor.toUpperCase()} is covered by at least one benchmark dataset for this project.` : `No, vendor ${potentialVendor.toUpperCase()} is not found in any benchmark datasets for this project.` });
 
             } else if (potentialProject) {
-                const projectBenchmarks = mockBenchmarkDatasets.filter(b => b.projectName.toLowerCase() === potentialProject);
+                const projectBenchmarks = benchmarks.filter(b => b.projectName.toLowerCase() === potentialProject);
                 if (projectBenchmarks.length > 0) {
                     addMessage({ actor: Actor.BOT, content: `Found ${projectBenchmarks.length} golden benchmark dataset(s) for project ${potentialProject}:` });
                     projectBenchmarks.forEach(benchmark => {
@@ -259,10 +324,10 @@ const App: React.FC = () => {
                 }
              });
         } else if (lowerInput.includes('query') || lowerInput.includes('find') || lowerInput.includes('check')) {
-            const potentialProject = words.find(word => mockConfigs.some(c => c.projectName.toLowerCase() === word));
-            const potentialVendor = words.find(word => mockConfigs.some(c => c.vendorId?.toLowerCase() === word));
+            const potentialProject = words.find(word => configs.some(c => c.projectName.toLowerCase() === word));
+            const potentialVendor = words.find(word => configs.some(c => c.vendorId?.toLowerCase() === word));
 
-            const matches = mockConfigs.filter(config => {
+            const matches = configs.filter(config => {
                 const projectMatch = potentialProject && config.projectName.toLowerCase() === potentialProject;
                 const vendorMatch = potentialVendor && config.vendorId?.toLowerCase() === potentialVendor;
 
@@ -300,7 +365,7 @@ const App: React.FC = () => {
         }
 
         setIsLoading(false);
-    }, [addMessage]);
+    }, [addMessage, configs, benchmarks]);
 
     useEffect(() => {
         const initialBotMessage = () => {
@@ -314,21 +379,6 @@ const App: React.FC = () => {
             }, 1000);
         };
         initialBotMessage();
-        
-        // Example of a proactive alert
-        setTimeout(() => {
-             addMessage({
-                actor: Actor.BOT,
-                card: {
-                    type: CardType.ALERT,
-                    payload: {
-                        project: "Q-Gen",
-                        severity: "High",
-                        message: "Detected an unusual spike in data mismatches over the last hour."
-                    }
-                }
-            })
-        }, 5000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -339,6 +389,51 @@ const App: React.FC = () => {
         setInput('');
     };
     
+    const handleAskGemini = async () => {
+        if (input.trim() === '') return;
+        
+        const userInput = input;
+        addMessage({ actor: Actor.USER, content: userInput });
+        setInput('');
+        setIsLoading(true);
+
+        try {
+            // FIX: Use process.env.API_KEY as per the coding guidelines. This resolves the TypeScript error.
+            const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+
+            const context = `
+                AVAILABLE CONFIGURATIONS: ${JSON.stringify(configs, null, 2)}
+                AVAILABLE BENCHMARKS: ${JSON.stringify(benchmarks, null, 2)}
+                CONVERSATION HISTORY (last 10): ${messages.slice(-10).map(m => `${m.actor === Actor.BOT ? 'BOT' : 'USER'}: ${m.content || '(Interactive Card)'}`).join('\n')}
+            `;
+
+            const prompt = `
+                SYSTEM INSTRUCTION: You are an expert AI assistant for the Teams SOP Bot Simulator. Your role is to help users understand their data and activities. Use the provided context to answer questions about configurations, benchmark data, test results, and conversation history. Be concise and helpful.
+                ---
+                CONTEXT:
+                ${context}
+                ---
+                USER QUESTION:
+                ${userInput}
+            `;
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+            });
+            
+            const geminiText = response.text;
+            addMessage({ actor: Actor.BOT, content: geminiText, isGemini: true });
+
+        } catch (error) {
+            console.error("Error calling Gemini API:", error);
+            addMessage({ actor: Actor.BOT, content: "Sorry, I had trouble connecting to the AI assistant. Please check the console for details.", isGemini: true });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+
     const handleCardAction = async (action: ActionType, payload?: any) => {
         setIsLoading(true);
         
@@ -354,7 +449,7 @@ const App: React.FC = () => {
             const sopMessage = findSopMessage(guideId);
             if (sopMessage && sopMessage.card) {
                 // Deactivate the old card in the message history.
-                updateCardInMessage(sopMessage.id, { status: 'superseded' });
+                updateCardInMessage(sopMessage.id, { ...sopMessage.card.payload, status: 'superseded' });
 
                 // Prepare the payload for the new, updated card.
                 const newPayload = {
@@ -371,8 +466,98 @@ const App: React.FC = () => {
                 });
             }
         };
+        
+        const rewindSopGuide = (guideId: number) => {
+            const sopMessage = findSopMessage(guideId);
+            if (sopMessage && sopMessage.card) {
+                // Deactivate the current card.
+                updateCardInMessage(sopMessage.id, { ...sopMessage.card.payload, status: 'superseded' });
+
+                // Prepare the payload for the previous step.
+                const newPayload = {
+                    ...sopMessage.card.payload,
+                    currentStep: (sopMessage.card.payload.currentStep || 1) - 1,
+                    status: 'active'
+                };
+
+                // Add the new "rewound" card.
+                addMessage({
+                    actor: Actor.BOT,
+                    card: { type: CardType.SOP_GUIDE, payload: newPayload }
+                });
+            }
+        };
+
 
         switch(action) {
+            case ActionType.SHOW_BENCHMARK_WIZARD:
+                addMessage({ actor: Actor.USER, content: "Add new Golden Benchmark" });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.BENCHMARK_WIZARD, payload: { projectName: payload?.projectName } } });
+                break;
+            case ActionType.SUBMIT_BENCHMARK_WIZARD:
+                addMessage({ actor: Actor.USER, content: `Save benchmark: ${payload.benchmark.id}` });
+                // eslint-disable-next-line no-case-declarations
+                const newBenchmark = payload.benchmark as BenchmarkDataset;
+                setBenchmarks(prev => [...prev, newBenchmark]);
+                updateCardInMessage(payload.messageId, { isSaved: true });
+                addMessage({ actor: Actor.BOT, content: `Benchmark "${newBenchmark.id}" saved successfully.` });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.BENCHMARK_LIST, payload: newBenchmark } });
+                break;
+            case ActionType.SHOW_JSON_IMPORTER:
+                 addMessage({ actor: Actor.USER, content: "Import Config from JSON" });
+                 addMessage({ actor: Actor.BOT, card: { type: CardType.JSON_IMPORTER } });
+                 break;
+            case ActionType.IMPORT_JSON_CONFIG:
+                addMessage({ actor: Actor.USER, content: "Imported JSON Configuration" });
+                updateCardInMessage(payload.messageId, { status: 'imported' });
+                // eslint-disable-next-line no-case-declarations
+                const settings = JSON.parse(payload.jsonString);
+
+                // 1. Create a new Configuration object
+                const newConfig: Configuration = {
+                    projectName: 'Imported Project', // Default name
+                    level: 'Project', // Default level
+                    status: 'Active',
+                    lastModified: new Date().toISOString().split('T')[0],
+                    createdBy: 'importer@example.com',
+                    settings: settings
+                };
+                
+                // 2. Dynamically generate a new ConfigTemplate
+                const settingsSchema: ConfigTemplate['settingsSchema'] = {};
+                for (const [key, value] of Object.entries(settings)) {
+                    if (typeof value === 'boolean') {
+                        settingsSchema[key] = 'boolean';
+                    } else if (typeof value === 'number') {
+                        settingsSchema[key] = 'number';
+                    } else if (typeof value === 'object' && value !== null) {
+                        settingsSchema[key] = 'json';
+                    } else {
+                        settingsSchema[key] = 'string';
+                    }
+                }
+                
+                const newTemplate: ConfigTemplate = {
+                    templateName: 'Generated Template for Imported Project',
+                    projectName: 'Imported Project',
+                    description: 'Auto-generated from imported JSON data.',
+                    settingsSchema: settingsSchema
+                };
+
+                addMessage({ actor: Actor.BOT, content: "Successfully imported configuration and generated a template. Please review and save." });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_DETAILS, payload: newConfig } });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.TEMPLATE_EDITOR, payload: { template: newTemplate } } });
+                break;
+            case ActionType.SAVE_GENERATED_TEMPLATE:
+                addMessage({ actor: Actor.USER, content: `Save Template: ${payload.template.templateName}` });
+                setTemplates(prev => [...prev, payload.template]);
+                updateCardInMessage(payload.messageId, { template: payload.template, isSaved: true });
+                addMessage({ actor: Actor.BOT, content: `Template "${payload.template.templateName}" has been saved to the library.` });
+                break;
+            case ActionType.REWIND_SOP_STEP:
+                addMessage({ actor: Actor.USER, content: "Go back to the previous step" });
+                rewindSopGuide(payload.guideId);
+                break;
             case ActionType.SHOW_FLASHCARDS:
                 setIsFlashcardModalOpen(true);
                 break;
@@ -452,7 +637,7 @@ const App: React.FC = () => {
             case ActionType.SUBMIT_CONFIG_STEP:
                 const { step: currentStep, data, messageId } = payload;
                 const totalSteps = data.level === 'Vendor' ? 4 : 3;
-
+                
                 if (currentStep === 1) {
                     updateCardInMessage(messageId, { step: 2, data });
                 } else if (currentStep === 2) {
@@ -478,6 +663,19 @@ const App: React.FC = () => {
                         advanceSopGuide(data.guideId, { selectedConfig: newConfig });
                     }
                 }
+                break;
+            case ActionType.UPDATE_CONFIG:
+                const { originalConfig, updatedConfig } = payload;
+                setConfigs(prev => prev.map(c => 
+                     (c.projectName === originalConfig.projectName && c.vendorId === originalConfig.vendorId)
+                        ? updatedConfig
+                        : c
+                ));
+                updateCardInMessage(payload.messageId, updatedConfig);
+                addMessage({
+                    actor: Actor.BOT,
+                    content: `Configuration for "${updatedConfig.projectName}" has been successfully updated.`
+                });
                 break;
             case ActionType.START_TEST:
                  addMessage({ actor: Actor.USER, content: `Run Test` });
@@ -561,6 +759,15 @@ const App: React.FC = () => {
                     advanceSopGuide(payload.guideId);
                  }
                 break;
+            case ActionType.ANALYSIS_FEEDBACK:
+                addMessage({ actor: Actor.USER, content: `Feedback on analysis: ${payload.isGood ? 'Helpful' : 'Not helpful'}` });
+                // eslint-disable-next-line no-case-declarations
+                const analysisMessage = messages.find(m => m.id === payload.messageId);
+                if (analysisMessage) {
+                    updateCardInMessage(payload.messageId, { ...analysisMessage.card?.payload, feedbackGiven: true });
+                }
+                addMessage({ actor: Actor.BOT, content: "Thanks for your feedback! It helps me improve." });
+                break;
             case ActionType.VIEW_METABASE_REPORT:
                 addMessage({ actor: Actor.USER, content: "View on Metabase" });
                 addMessage({ actor: Actor.BOT, content: "Here is the link to the detailed report on Metabase: [metabase.example.com/d/12345](https://metabase.example.com/d/12345)" });
@@ -588,6 +795,15 @@ const App: React.FC = () => {
                     advanceSopGuide(payload.guideId);
                  }
                 break;
+             case ActionType.ROOT_CAUSE_FEEDBACK:
+                addMessage({ actor: Actor.USER, content: `Feedback on root cause: ${payload.isGood ? 'Helpful' : 'Not helpful'}` });
+                 // eslint-disable-next-line no-case-declarations
+                const rootCauseMessage = messages.find(m => m.id === payload.messageId);
+                if (rootCauseMessage) {
+                    updateCardInMessage(payload.messageId, { ...rootCauseMessage.card?.payload, feedbackGiven: true });
+                }
+                addMessage({ actor: Actor.BOT, content: "Thanks for your feedback! It helps me improve." });
+                break;
              case ActionType.SUGGESTED_ACTION:
                 addMessage({ actor: Actor.USER, content: `Perform action: ${payload.title}` });
                 addMessage({ actor: Actor.BOT, content: `Acknowledged. I have initiated the action: "${payload.title}".`});
@@ -610,9 +826,9 @@ const App: React.FC = () => {
                  });
                 break;
             case ActionType.RERUN_DIAGNOSTIC:
-                updateCardInMessage(payload.messageId, { status: 'running' });
+                updateCardInMessage(payload.messageId, { ...payload, status: 'running' });
                 await new Promise(res => setTimeout(res, 2500));
-                updateCardInMessage(payload.messageId, { status: 'resolved' });
+                updateCardInMessage(payload.messageId, { ...payload, status: 'resolved' });
                 break;
             case ActionType.CONFIRM_PAUSE_PRODUCTION:
                 addMessage({ actor: Actor.USER, content: "Confirm PAUSE Production" });
@@ -639,7 +855,7 @@ const App: React.FC = () => {
                  break;
             case ActionType.VIEW_BENCHMARK_DETAILS:
                 addMessage({ actor: Actor.USER, content: `Show details for benchmark ${payload.benchmarkId}` });
-                const benchmark = mockBenchmarkDatasets.find(b => b.id === payload.benchmarkId);
+                const benchmark = benchmarks.find(b => b.id === payload.benchmarkId);
                 if (benchmark) {
                     addMessage({ 
                         actor: Actor.BOT, 
@@ -734,12 +950,13 @@ const App: React.FC = () => {
                             {msg.actor === Actor.BOT && <BotIcon />}
                             <div className={`flex flex-col ${msg.actor === Actor.USER ? 'items-end' : 'items-start'}`}>
                                 <div className={`flex items-center space-x-2 ${msg.actor === Actor.USER ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                                    <span className="font-bold text-sm">{msg.actor === Actor.BOT ? 'SOP Bot' : 'You'}</span>
+                                    {msg.isGemini && <GeminiIcon className="h-4 w-4 text-purple-400" />}
+                                    <span className="font-bold text-sm">{msg.actor === Actor.BOT ? (msg.isGemini ? 'SOP Bot (AI)' : 'SOP Bot') : 'You'}</span>
                                     <span className="text-xs text-gray-500">{msg.timestamp}</span>
                                 </div>
                                 <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
-                                    {msg.content && <div className={`px-4 py-2 rounded-lg inline-block ${msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600'}`}>{msg.content}</div>}
-                                    {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={mockConfigs} allTemplates={mockTemplates} allBenchmarks={mockBenchmarkDatasets} />}
+                                    {msg.content && <div className={`px-4 py-2 rounded-lg inline-block ${msg.isGemini ? 'bg-purple-900/50 border border-purple-700' : (msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600')}`}>{msg.content}</div>}
+                                    {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={configs} allTemplates={templates} allBenchmarks={benchmarks} />}
                                 </div>
                             </div>
                              {msg.actor === Actor.USER && <UserIcon />}
@@ -774,14 +991,25 @@ const App: React.FC = () => {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
-                            placeholder="Type a message..."
+                            placeholder="Type a message to the bot, or ask the AI..."
                             className="flex-1 bg-transparent px-2 text-white placeholder-gray-500 focus:outline-none"
                             disabled={isLoading}
                         />
+                         <button
+                            onClick={handleAskGemini}
+                            disabled={isLoading || input.trim() === ''}
+                            className="p-2 text-purple-400 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed hover:text-purple-300 transition-colors"
+                            aria-label="Ask Gemini AI"
+                            title="Ask Gemini AI"
+                        >
+                            <SparklesIcon />
+                        </button>
                         <button 
                             onClick={handleSendMessage} 
                             disabled={isLoading || input.trim() === ''}
-                            className="p-2 bg-indigo-600 rounded-md text-white disabled:bg-gray-600 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
+                            className="p-2 ml-2 bg-indigo-600 rounded-md text-white disabled:bg-gray-600 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
+                            aria-label="Send to bot"
+                            title="Send to bot"
                         >
                             {isLoading ? <LoadingSpinner /> : <SendIcon />}
                         </button>

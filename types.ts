@@ -21,6 +21,9 @@ export enum CardType {
   BENCHMARK_LIST = 'benchmark_list',
   CONFIG_CREATOR_CHOOSER = 'config_creator_chooser',
   TEMPLATE_SELECTOR = 'template_selector',
+  JSON_IMPORTER = 'json_importer',
+  TEMPLATE_EDITOR = 'template_editor',
+  BENCHMARK_WIZARD = 'benchmark_wizard',
 }
 
 export enum ActionType {
@@ -34,13 +37,16 @@ export enum ActionType {
     START_CLONE = 'start_clone',
     SELECT_TEMPLATE = 'select_template',
     SUBMIT_CONFIG_STEP = 'submit_config_step',
+    UPDATE_CONFIG = 'update_config',
     START_TEST = 'start_test',
     START_BATCH_TEST = 'start_batch_test',
     RUN_TEST_WITH_FILE = 'run_test_with_file',
     DOWNLOAD_REPORT = 'download_report',
     TRIGGER_ANALYSIS = 'trigger_analysis',
+    ANALYSIS_FEEDBACK = 'analysis_feedback',
     VIEW_METABASE_REPORT = 'view_metabase_report',
     INVESTIGATE_ROOT_CAUSE = 'investigate_root_cause',
+    ROOT_CAUSE_FEEDBACK = 'root_cause_feedback',
     TRIGGER_DIAGNOSTIC = 'trigger_diagnostic',
     RERUN_DIAGNOSTIC = 'rerun_diagnostic',
     REQUEST_PAUSE_PRODUCTION = 'request_pause_production',
@@ -50,7 +56,13 @@ export enum ActionType {
     SUGGESTED_ACTION = 'suggested_action',
     VIEW_BENCHMARK_DETAILS = 'view_benchmark_details',
     VIEW_BENCHMARK_ON_METABASE = 'view_benchmark_on_metabase',
+    REWIND_SOP_STEP = 'rewind_sop_step',
     SHOW_FLASHCARDS = 'show_flashcards',
+    SHOW_JSON_IMPORTER = 'show_json_importer',
+    IMPORT_JSON_CONFIG = 'import_json_config',
+    SAVE_GENERATED_TEMPLATE = 'save_generated_template',
+    SHOW_BENCHMARK_WIZARD = 'show_benchmark_wizard',
+    SUBMIT_BENCHMARK_WIZARD = 'submit_benchmark_wizard',
 }
 
 export interface Message {
@@ -59,6 +71,7 @@ export interface Message {
   content?: string;
   card?: Card;
   timestamp: string;
+  isGemini?: boolean;
 }
 
 export interface Card {
@@ -73,7 +86,7 @@ export interface Configuration {
   status: 'Active' | 'Paused';
   lastModified: string;
   createdBy: string;
-  settings: Record<string, string | number | boolean>;
+  settings: Record<string, any>;
 }
 
 export interface ConfigTemplate {
@@ -81,7 +94,8 @@ export interface ConfigTemplate {
     projectName: string;
     description: string;
     // Defines the fields and their types for the settings
-    settingsSchema: Record<string, 'string' | 'number' | 'boolean'>;
+    settingsSchema: Record<string, 'string' | 'number' | 'boolean' | 'json'>;
+    defaultValues?: Record<string, any>;
 }
 
 

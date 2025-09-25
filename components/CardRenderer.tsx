@@ -1,6 +1,6 @@
 import React, { useState, ChangeEvent, useRef, useMemo, useEffect } from 'react';
 import { Card, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate } from '../types';
-import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon } from './Icons';
+import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon, ThumbsUpIcon, ThumbsDownIcon, ImportIcon, AddDatabaseIcon, UploadIcon } from './Icons';
 
 interface CardRendererProps {
   card: Card;
@@ -11,7 +11,6 @@ interface CardRendererProps {
   allBenchmarks?: BenchmarkDataset[];
 }
 
-// FIX: Changed component definition to use React.FC for proper handling of React props like `key` and to improve type safety.
 const CardButton: React.FC<{ onClick: () => void, children: React.ReactNode, className?: string, disabled?: boolean }> = ({ onClick, children, className = 'bg-indigo-600 hover:bg-indigo-700', disabled = false }) => (
     <button
         onClick={onClick}
@@ -22,13 +21,98 @@ const CardButton: React.FC<{ onClick: () => void, children: React.ReactNode, cla
     </button>
 );
 
+const formatTitle = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+
+const EditableJsonTable: React.FC<{
+    value: any[];
+    onChange: (newValue: any[]) => void;
+}> = ({ value, onChange }) => {
+    // Determine headers from the first object, or handle empty array gracefully
+    const headers = value && value.length > 0 ? Object.keys(value[0]) : [];
+
+    const handleCellChange = (rowIndex: number, key: string, cellValue: string) => {
+        const newValue = [...value];
+        newValue[rowIndex] = { ...newValue[rowIndex], [key]: cellValue };
+        onChange(newValue);
+    };
+
+    const handleAddRow = () => {
+        // Create a new row with the same keys but empty values
+        const newRow = headers.reduce((acc, header) => ({ ...acc, [header]: '' }), {});
+        onChange([...value, newRow]);
+    };
+
+    const handleDeleteRow = (rowIndex: number) => {
+        const newValue = value.filter((_, index) => index !== rowIndex);
+        onChange(newValue);
+    };
+
+    if (headers.length === 0) {
+        return (
+             <div>
+                <p className="text-sm text-gray-400 mb-2">This setting is empty. Add the first item to define its structure.</p>
+                <CardButton onClick={() => {
+                    // Provide a default structure for the 'transformation' setting if it's empty
+                    onChange([{ method: '', specFile: '', specDir: '' }]);
+                }} className="bg-gray-600 hover:bg-gray-700 text-xs py-1 px-3">Add Item</CardButton>
+            </div>
+        );
+    }
+
+    return (
+        <div className="overflow-x-auto border border-gray-700 rounded-lg">
+            <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-800">
+                    <tr>
+                        {headers.map(header => (
+                            <th key={header} scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                {formatTitle(header)}
+                            </th>
+                        ))}
+                        <th scope="col" className="relative px-4 py-2 w-12">
+                            <span className="sr-only">Delete</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody className="bg-gray-900/30 divide-y divide-gray-700">
+                    {value.map((row, rowIndex) => (
+                        <tr key={rowIndex}>
+                            {headers.map(header => (
+                                <td key={`${rowIndex}-${header}`} className="px-2 py-1 whitespace-nowrap">
+                                    <input
+                                        type="text"
+                                        value={row[header] || ''}
+                                        onChange={(e) => handleCellChange(rowIndex, header, e.target.value)}
+                                        className="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-1 px-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm"
+                                    />
+                                </td>
+                            ))}
+                            <td className="px-2 py-1 whitespace-nowrap text-center text-sm font-medium">
+                                <button onClick={() => handleDeleteRow(rowIndex)} className="text-red-500 hover:text-red-400" title="Delete row">
+                                    <XCircleIcon className="w-5 h-5" />
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <div className="p-2 bg-gray-800 text-right">
+                <CardButton onClick={handleAddRow} className="bg-indigo-600 hover:bg-indigo-700 text-xs py-1 px-3">
+                    Add Row
+                </CardButton>
+            </div>
+        </div>
+    );
+};
+
+
 const WelcomeCard: React.FC<{ onAction: CardRendererProps['onAction'] }> = ({ onAction }) => {
     const [showQuickActions, setShowQuickActions] = useState(false);
 
     return (
         <div>
             <h3 className="font-bold text-lg text-white">Welcome to the SOP Bot!</h3>
-            <p className="text-gray-300 mt-1">I can help you automate financial processes. I recommend starting with a guided SOP for a complete workflow.</p>
+            <p className="text-gray-300 mt-1">This self-service SOP bot helps you perform end-to-end validation, functional, regression, performance, and stress testing for your TDS automation workflows.</p>
             <div className="mt-4">
                  <CardButton onClick={() => onAction(ActionType.SHOW_SOP_CHOOSER)} className="w-full bg-indigo-600 hover:bg-indigo-700">
                     Start a Guided SOP
@@ -38,10 +122,10 @@ const WelcomeCard: React.FC<{ onAction: CardRendererProps['onAction'] }> = ({ on
                 <summary className="text-sm font-medium text-gray-400 hover:text-white cursor-pointer">
                    {showQuickActions ? 'Hide' : 'Show'} Quick Actions
                 </summary>
-                <div className="flex space-x-2 mt-3 pt-3 border-t border-gray-700">
-                    <CardButton onClick={() => onAction(ActionType.START_CONFIG)} className="bg-gray-600 hover:bg-gray-700">New Config</CardButton>
-                    <CardButton onClick={() => onAction(ActionType.START_TEST)} className="bg-gray-600 hover:bg-gray-700">Run Test</CardButton>
-                    <CardButton onClick={() => onAction(ActionType.UPLOAD_FILE)} className="bg-gray-600 hover:bg-gray-700">Upload File</CardButton>
+                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-700">
+                    <CardButton onClick={() => onAction(ActionType.START_CONFIG)} className="bg-gray-600 hover:bg-gray-700 text-xs">New Config</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.START_TEST)} className="bg-gray-600 hover:bg-gray-700 text-xs">Run Test</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD)} className="bg-gray-600 hover:bg-gray-700 text-xs col-span-2">Add Golden Benchmark</CardButton>
                 </div>
             </details>
         </div>
@@ -111,8 +195,8 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
     <div>
         <h3 className="font-bold text-lg text-white">Create New Configuration</h3>
         <p className="text-gray-300 mt-1">How would you like to start?</p>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <button 
+        <div className="mt-4 grid grid-cols-1 gap-3">
+            <button
                 onClick={() => onAction(ActionType.START_FROM_TEMPLATE, { guideId: payload.guideId })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
@@ -122,7 +206,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
                 </div>
                 <p className="text-sm text-gray-400 mt-1">Use a pre-defined schema for a specific project.</p>
             </button>
-            <button 
+            <button
                 onClick={() => onAction(ActionType.START_CLONE, { guideId: payload.guideId })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
@@ -131,6 +215,16 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
                     <p className="ml-2 font-semibold text-white">Clone an Existing Configuration</p>
                 </div>
                 <p className="text-sm text-gray-400 mt-1">Copy and modify an existing configuration.</p>
+            </button>
+            <button
+                onClick={() => onAction(ActionType.SHOW_JSON_IMPORTER, { guideId: payload.guideId })}
+                className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
+            >
+                <div className="flex items-center">
+                    <ImportIcon />
+                    <p className="ml-2 font-semibold text-white">Import from JSON</p>
+                </div>
+                <p className="text-sm text-gray-400 mt-1">Create a config and template from raw JSON data.</p>
             </button>
         </div>
     </div>
@@ -224,6 +318,8 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
     useEffect(() => {
         if (template && !data.projectName) {
             setProjectName(template.projectName);
+            const initialSettings = { ...(template.defaultValues || {}) };
+            setSettings(initialSettings);
         }
         if (clonedData && !data.projectName) {
             setProjectName(clonedData.projectName);
@@ -232,12 +328,12 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
         }
     }, [template, clonedData, data.projectName]);
 
-    const handleSettingsChange = (key: string, value: string | number | boolean) => {
+    const handleSettingsChange = (key: string, value: any) => {
         setSettings((prev: any) => ({ ...prev, [key]: value }));
     };
     
     const handleNext = () => {
-        const basePayload = { messageId, data: { ...data } };
+        const basePayload = { messageId, data: { ...data, settings } };
         if (step === 2) { // Submitting project name
             onAction(ActionType.SUBMIT_CONFIG_STEP, { ...basePayload, step: 2, data: { ...basePayload.data, projectName } });
         } else if (step === 3) { // Submitting vendor ID
@@ -249,6 +345,21 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
     
     const finalStep = (step === 4 || (step === 3 && level==='Project'));
     const allSettingsFilled = finalStep ? Object.keys(schema).every(key => settings[key] !== undefined && settings[key] !== '') : false;
+
+    // Separate schema fields into simple (for the grid) and complex (for full-width display)
+    const [simpleFields, complexFields] = useMemo(() => {
+        const simple: [string, any][] = [];
+        const complex: [string, any][] = [];
+        Object.entries(schema).forEach(([key, type]) => {
+            if (type === 'json') {
+                complex.push([key, type]);
+            } else {
+                simple.push([key, type]);
+            }
+        });
+        return [simple, complex];
+    }, [schema]);
+
 
     return (
         <div>
@@ -284,34 +395,78 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
             {finalStep && (
                  <div className="mt-2 space-y-4">
                      <p className="text-gray-300 mb-2">Project: <span className="font-semibold text-white">{data.projectName}</span></p>
-                     {Object.entries(schema).map(([key, type]) => {
-                         const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                         const id = `${key}-${messageId}`;
-                         if (type === 'boolean') {
-                             return (
-                                 <div key={id} className="relative flex items-start">
-                                    <div className="flex items-center h-5">
-                                        <input id={id} type="checkbox" checked={settings[key] || false} onChange={(e) => handleSettingsChange(key, e.target.checked)} className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded" />
+                    
+                    {/* Render simple fields in a grid */}
+                    {simpleFields.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border border-gray-700 rounded-lg p-3 bg-gray-900/30">
+                            {simpleFields.map(([key, type]) => {
+                                const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                                const id = `${key}-${messageId}`;
+                                if (type === 'boolean') {
+                                    return (
+                                        <div key={id} className="relative flex items-center col-span-1 py-2">
+                                            <div className="flex items-center h-5">
+                                                <input id={id} type="checkbox" checked={!!settings[key]} onChange={(e) => handleSettingsChange(key, e.target.checked)} className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded" />
+                                            </div>
+                                            <div className="ml-3 text-sm">
+                                                <label htmlFor={id} className="font-medium text-gray-300">{label}</label>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div key={id} className="col-span-1">
+                                        <label htmlFor={id} className="block text-sm font-medium text-gray-300">{label}</label>
+                                        <input 
+                                            type={type === 'number' ? 'number' : 'text'} 
+                                            id={id} 
+                                            value={settings[key] || ''} 
+                                            onChange={(e) => handleSettingsChange(key, type === 'number' ? parseFloat(e.target.value) : e.target.value)} 
+                                            className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" 
+                                        />
                                     </div>
-                                    <div className="ml-3 text-sm">
-                                        <label htmlFor={id} className="font-medium text-gray-300">{label}</label>
+                                );
+                            })}
+                        </div>
+                     )}
+                     
+                     {/* Render complex fields below the grid */}
+                     {complexFields.length > 0 && (
+                        <div className="space-y-4">
+                            {complexFields.map(([key, type]) => {
+                                const label = formatTitle(key);
+                                const id = `${key}-${messageId}`;
+                                const value = settings[key] || [];
+                                 if (type === 'json' && Array.isArray(value)) {
+                                    return (
+                                        <div key={id}>
+                                            <label className="block text-sm font-medium text-gray-300">{label}</label>
+                                            <div className="mt-1">
+                                                <EditableJsonTable 
+                                                    value={value} 
+                                                    onChange={(newValue) => handleSettingsChange(key, newValue)} 
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                // Fallback for non-array JSON - though not used in current templates
+                                return (
+                                    <div key={id}>
+                                        <label htmlFor={id} className="block text-sm font-medium text-gray-300">{label}</label>
+                                        <textarea 
+                                            id={id}
+                                            value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''}
+                                            onChange={(e) => handleSettingsChange(key, e.target.value)}
+                                            rows={5}
+                                            className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white font-mono text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                            placeholder={`Enter a valid JSON for ${label}`}
+                                        />
                                     </div>
-                                </div>
-                             );
-                         }
-                         return (
-                            <div key={id}>
-                                <label htmlFor={id} className="block text-sm font-medium text-gray-300">{label}</label>
-                                <input 
-                                    type={type === 'number' ? 'number' : 'text'} 
-                                    id={id} 
-                                    value={settings[key] || ''} 
-                                    onChange={(e) => handleSettingsChange(key, type === 'number' ? parseFloat(e.target.value) : e.target.value)} 
-                                    className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" 
-                                />
-                            </div>
-                         );
-                     })}
+                                );
+                            })}
+                        </div>
+                     )}
                  </div>
             )}
 
@@ -327,56 +482,251 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
 };
 
 
-const ConfigDetailsCard: React.FC<{ payload: any }> = ({ payload }) => (
-    <div>
-        <h3 className="font-bold text-lg text-white mb-3">Configuration Details</h3>
-        
-        {/* Main Details Section (Key/Value Form Style) */}
-        <div className="space-y-2 border border-gray-700 rounded-lg p-3 bg-gray-900/30 divide-y divide-gray-700">
-            <div className="flex justify-between items-center py-1">
-                <p className="text-sm font-medium text-gray-400">Project Name</p>
-                <p className="text-sm text-white font-semibold">{payload.projectName}</p>
-            </div>
-            <div className="flex justify-between items-center py-1">
-                <p className="text-sm font-medium text-gray-400">Vendor ID</p>
-                <p className="text-sm text-white">{payload.vendorId || 'N/A'}</p>
-            </div>
-             <div className="flex justify-between items-center py-1">
-                <p className="text-sm font-medium text-gray-400">Level</p>
-                <p className={`text-sm font-semibold ${payload.level === 'Project' ? 'text-indigo-400' : 'text-teal-400'}`}>{payload.level}</p>
-            </div>
-            <div className="flex justify-between items-center py-1">
-                <p className="text-sm font-medium text-gray-400">Status</p>
-                <p className="text-sm text-white">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${payload.status === 'Active' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
-                        {payload.status}
-                    </span>
-                </p>
-            </div>
-             <div className="flex justify-between items-center py-1">
-                <p className="text-sm font-medium text-gray-400">Last Modified</p>
-                <p className="text-sm text-white">{payload.lastModified} by {payload.createdBy}</p>
-            </div>
-        </div>
+const ConfigDetailsCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editState, setEditState] = useState<Configuration>(payload);
 
-        {/* Settings Section (List Style) */}
-        <div className="mt-4">
-            <h4 className="font-semibold text-gray-300 mb-2">Settings</h4>
-            <div className="space-y-2 border border-gray-700 rounded-lg p-3 bg-gray-900/30 divide-y divide-gray-700">
-                {Object.entries(payload.settings).map(([key, value]) => (
-                     <div className="flex justify-between items-center py-1" key={key}>
-                        <p className="text-sm font-medium text-gray-400">{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</p>
-                        <p className="text-sm text-white font-mono">
-                            {typeof value === 'boolean' ? (value ? 'Enabled' : 'Disabled') :
-                             typeof value === 'number' ? `$${value}` :
-                             String(value)}
-                        </p>
+    const [simpleEditFields, complexEditFields] = useMemo(() => {
+        const simple: string[] = [];
+        const complex: string[] = [];
+        if (editState.settings) {
+            Object.entries(editState.settings).forEach(([key, value]) => {
+                if (typeof value === 'object' && value !== null) {
+                    complex.push(key);
+                } else {
+                    simple.push(key);
+                }
+            });
+        }
+        return [simple, complex];
+    }, [editState.settings]);
+
+    const handleEditClick = () => {
+        const stateForEditing = JSON.parse(JSON.stringify(payload)); // Deep clone
+        setEditState(stateForEditing);
+        setIsEditing(true);
+    };
+
+    const handleCancel = () => {
+        setIsEditing(false);
+        setEditState(payload); // Revert changes
+    };
+
+    const handleSave = () => {
+        onAction(ActionType.UPDATE_CONFIG, {
+            messageId,
+            originalConfig: payload,
+            updatedConfig: { ...editState, lastModified: new Date().toISOString().split('T')[0] },
+        });
+        setIsEditing(false);
+    };
+
+    const handleFieldChange = (key: keyof Configuration, value: any) => {
+        setEditState(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleSettingsChange = (key: string, value: any) => {
+        setEditState(prev => ({
+            ...prev,
+            settings: {
+                ...prev.settings,
+                [key]: value,
+            },
+        }));
+    };
+
+    if (isEditing) {
+        const settings = editState.settings || {};
+        const commonInputClass = "mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm";
+        return (
+            <div>
+                <h3 className="font-bold text-lg text-white mb-3">Editing Configuration</h3>
+                <div className="space-y-4">
+                    {/* Core fields */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-gray-700 rounded-lg p-3 bg-gray-900/30">
+                         <div>
+                            <label htmlFor={`project-name-${messageId}-edit`} className="block text-sm font-medium text-gray-300">Project Name</label>
+                            <input type="text" id={`project-name-${messageId}-edit`} value={editState.projectName} onChange={(e) => handleFieldChange('projectName', e.target.value)} className={commonInputClass} />
+                        </div>
+                         <div>
+                            <label htmlFor={`vendor-id-${messageId}-edit`} className="block text-sm font-medium text-gray-300">Vendor ID (Optional)</label>
+                            <input type="text" id={`vendor-id-${messageId}-edit`} value={editState.vendorId || ''} onChange={(e) => handleFieldChange('vendorId', e.target.value || undefined)} className={commonInputClass} />
+                        </div>
+                        <div>
+                            <label htmlFor={`level-${messageId}-edit`} className="block text-sm font-medium text-gray-300">Level</label>
+                            <select id={`level-${messageId}-edit`} value={editState.level} onChange={(e) => handleFieldChange('level', e.target.value as Configuration['level'])} className={commonInputClass}>
+                                <option value="Project">Project</option>
+                                <option value="Vendor">Vendor</option>
+                            </select>
+                        </div>
+                        <div>
+                             <label htmlFor={`status-${messageId}-edit`} className="block text-sm font-medium text-gray-300">Status</label>
+                             <select id={`status-${messageId}-edit`} value={editState.status} onChange={(e) => handleFieldChange('status', e.target.value as Configuration['status'])} className={commonInputClass}>
+                                <option value="Active">Active</option>
+                                <option value="Paused">Paused</option>
+                            </select>
+                        </div>
                     </div>
-                ))}
+                    
+                    <h4 className="font-semibold text-gray-300 mb-2 pt-2">Settings</h4>
+                    {/* Simple fields grid */}
+                    {simpleEditFields.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border border-gray-700 rounded-lg p-3 bg-gray-900/30">
+                            {simpleEditFields.map(key => {
+                                const id = `${key}-${messageId}-edit`;
+                                const originalValueType = typeof payload.settings[key];
+                                if (originalValueType === 'boolean') {
+                                    return (
+                                        <div key={id} className="relative flex items-center col-span-1 py-2">
+                                            <div className="flex items-center h-5">
+                                                <input id={id} type="checkbox" checked={!!settings[key]} onChange={(e) => handleSettingsChange(key, e.target.checked)} className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded" />
+                                            </div>
+                                            <div className="ml-3 text-sm">
+                                                <label htmlFor={id} className="font-medium text-gray-300">{formatTitle(key)}</label>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div key={id} className="col-span-1">
+                                        <label htmlFor={id} className="block text-sm font-medium text-gray-300">{formatTitle(key)}</label>
+                                        <input type={originalValueType === 'number' ? 'number' : 'text'} id={id} value={settings[key] || ''} onChange={(e) => handleSettingsChange(key, originalValueType === 'number' ? parseFloat(e.target.value) : e.target.value)} className={commonInputClass} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {/* Complex fields */}
+                     {complexEditFields.map(key => {
+                        const id = `${key}-${messageId}-edit`;
+                        const value = settings[key] || [];
+                        if (Array.isArray(value)) {
+                             return (
+                                <div key={id}>
+                                    <label className="block text-sm font-medium text-gray-300">{formatTitle(key)}</label>
+                                    <div className="mt-1">
+                                        <EditableJsonTable 
+                                            value={value} 
+                                            onChange={(newValue) => handleSettingsChange(key, newValue)} 
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        }
+                        // Fallback for non-array JSON
+                        return (
+                            <div key={id}>
+                                <label htmlFor={id} className="block text-sm font-medium text-gray-300">{formatTitle(key)}</label>
+                                <textarea id={id} value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''} onChange={(e) => handleSettingsChange(key, e.target.value)} rows={5} className={commonInputClass} />
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="flex justify-end space-x-2 mt-4">
+                    <CardButton onClick={handleCancel} className="bg-gray-600 hover:bg-gray-700">Cancel</CardButton>
+                    <CardButton onClick={handleSave}>Save Changes</CardButton>
+                </div>
+            </div>
+        );
+    }
+
+    // Display Mode
+    const { settings = {} } = payload;
+    const simpleSettings = Object.entries(settings).filter(([, value]) => typeof value !== 'object' || value === null);
+    const complexSettings = Object.entries(settings).filter(([, value]) => typeof value === 'object' && value !== null);
+    
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-white mb-3">Configuration Details</h3>
+            
+            <div className="space-y-2 border border-gray-700 rounded-lg p-3 bg-gray-900/30 divide-y divide-gray-700">
+                <div className="flex justify-between items-center py-1">
+                    <p className="text-sm font-medium text-gray-400">Project Name</p>
+                    <p className="text-sm text-white font-semibold">{payload.projectName}</p>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                    <p className="text-sm font-medium text-gray-400">Vendor ID</p>
+                    <p className="text-sm text-white">{payload.vendorId || 'N/A'}</p>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                    <p className="text-sm font-medium text-gray-400">Level</p>
+                    <p className={`text-sm font-semibold ${payload.level === 'Project' ? 'text-indigo-400' : 'text-teal-400'}`}>{payload.level}</p>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                    <p className="text-sm font-medium text-gray-400">Status</p>
+                    <p className="text-sm text-white">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${payload.status === 'Active' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
+                            {payload.status}
+                        </span>
+                    </p>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                    <p className="text-sm font-medium text-gray-400">Last Modified</p>
+                    <p className="text-sm text-white">{payload.lastModified} by {payload.createdBy}</p>
+                </div>
+            </div>
+
+            {simpleSettings.length > 0 && (
+                <div className="mt-4">
+                    <h4 className="font-semibold text-gray-300 mb-2">Settings</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 border border-gray-700 rounded-lg p-3 bg-gray-900/30">
+                        {simpleSettings.map(([key, value]) => (
+                            <div key={key}>
+                                <p className="text-sm font-medium text-gray-400">{formatTitle(key)}</p>
+                                <p className="text-sm text-white font-mono break-all">
+                                    {typeof value === 'boolean' ? (value ? 'Enabled' : 'Disabled') : String(value)}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {complexSettings.map(([key, value]) => (
+                <div key={key} className="mt-4">
+                    <h4 className="font-semibold text-gray-300 mb-2">{formatTitle(key)}</h4>
+                    {Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' ? (
+                        <div className="overflow-x-auto border border-gray-700 rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-700">
+                                <thead className="bg-gray-800">
+                                    <tr>
+                                        {Object.keys(value[0]).map(header => (
+                                            <th key={header} scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                                {formatTitle(header)}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-gray-900/30 divide-y divide-gray-700">
+                                    {value.map((row, rowIndex) => (
+                                        <tr key={rowIndex}>
+                                            {Object.values(row).map((cell: any, cellIndex) => (
+                                                <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-white font-mono">
+                                                    {String(cell)}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="space-y-2 border border-gray-700 rounded-lg p-3 bg-gray-900/30">
+                            <pre className="p-2 bg-gray-900 rounded-md text-xs text-gray-300 overflow-x-auto">
+                                <code>{JSON.stringify(value, null, 2)}</code>
+                            </pre>
+                        </div>
+                    )}
+                </div>
+            ))}
+            <div className="flex justify-end mt-4">
+                <CardButton onClick={handleEditClick} className="bg-gray-600 hover:bg-gray-700">
+                    Edit Configuration
+                </CardButton>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number, allBenchmarks: BenchmarkDataset[] }> = ({ payload, onAction, messageId, allBenchmarks }) => {
     const [path, setPath] = useState('ftp://data.example.com/incoming/batch_001/');
@@ -414,19 +764,27 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
                     <label htmlFor={`benchmark-selector-${messageId}`} className="block text-sm font-medium text-gray-300 flex items-center mb-2">
                         <DatabaseIcon /><span className="ml-2">Target Benchmark Dataset</span>
                     </label>
-                    <select
-                        id={`benchmark-selector-${messageId}`}
-                        value={selectedBenchmarkId || ''}
-                        onChange={(e) => setSelectedBenchmarkId(e.target.value)}
-                        className="w-full bg-gray-900 text-white placeholder-gray-400 border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        disabled={relevantBenchmarks.length === 0}
-                    >
-                        {relevantBenchmarks.length > 0 ? (
-                            relevantBenchmarks.map(b => <option key={b.id} value={b.id}>{b.id} ({b.description.substring(0, 30)}...)</option>)
-                        ) : (
-                            <option>No benchmarks available for this project</option>
-                        )}
-                    </select>
+                    {relevantBenchmarks.length > 0 ? (
+                        <select
+                            id={`benchmark-selector-${messageId}`}
+                            value={selectedBenchmarkId || ''}
+                            onChange={(e) => setSelectedBenchmarkId(e.target.value)}
+                            className="w-full bg-gray-900 text-white placeholder-gray-400 border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            {relevantBenchmarks.map(b => <option key={b.id} value={b.id}>{b.id} ({b.description.substring(0, 30)}...)</option>)}
+                        </select>
+                    ) : (
+                        <div className="p-3 bg-yellow-900/50 border border-yellow-700 rounded-md text-center">
+                            <p className="text-sm text-yellow-300">No Golden Benchmarks found for project '{payload.config.projectName}'.</p>
+                            <p className="text-xs text-yellow-400 mt-1">A benchmark is required to run a test.</p>
+                            <CardButton 
+                                onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD, { projectName: payload.config.projectName })}
+                                className="bg-yellow-600 hover:bg-yellow-700 mt-2 text-xs py-1 px-3"
+                            >
+                                Add Benchmark
+                            </CardButton>
+                        </div>
+                    )}
                 </div>
             )}
             
@@ -497,49 +855,99 @@ const TestResultsSummaryCard: React.FC<{ payload: any, onAction: CardRendererPro
     </div>
 );
 
-const AnalysisResultsCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => (
-    <div>
-        <h3 className="font-bold text-lg text-white">Discrepancy Analysis</h3>
-        <ul className="mt-2 space-y-2">
-            <li className="flex items-center space-x-2 p-2 bg-gray-700/50 rounded-md">
-                <XCircleIcon />
-                <span className="text-gray-300 flex-grow">Data Quality Issues</span>
-                <span className="font-semibold text-white">{payload.dataQuality}</span>
-            </li>
-            <li className="flex items-center space-x-2 p-2 bg-gray-700/50 rounded-md">
-                <ExclamationCircleIcon />
-                <span className="text-gray-300 flex-grow">Configuration/Logic Problems</span>
-                <span className="font-semibold text-white">{payload.logic}</span>
-            </li>
-        </ul>
-        <div className="flex space-x-2 mt-4">
-            <CardButton onClick={() => onAction(ActionType.VIEW_METABASE_REPORT)} className="bg-sky-600 hover:bg-sky-700">View on Metabase <ExternalLinkIcon /></CardButton>
-            <CardButton onClick={() => onAction(ActionType.INVESTIGATE_ROOT_CAUSE, { testId: payload.testId, guideId: payload.guideId, messageId })}>Find Root Cause & Suggestions</CardButton>
-        </div>
-    </div>
-);
+const AnalysisResultsCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [feedbackGiven, setFeedbackGiven] = useState(payload.feedbackGiven || false);
 
-const RootCauseAnalysisCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'] }> = ({ payload, onAction }) => (
-    <div>
-        <h3 className="font-bold text-lg text-white flex items-center"><LightBulbIcon /><span className="ml-2">Root Cause Analysis</span></h3>
-        <div className="mt-3 p-3 bg-gray-900/70 rounded-md">
-            <p className="text-sm text-gray-300">
-                <span className="font-semibold text-yellow-400">Probable Cause: </span>
-                {payload.cause}
-            </p>
-        </div>
-        <div className="mt-4">
-            <h4 className="font-semibold text-gray-200">Suggested Actions</h4>
-            <div className="mt-2 space-y-2">
-                {payload.suggestedActions.map((action: {title: string, action: string}) => (
-                    <CardButton key={action.action} onClick={() => onAction(ActionType.SUGGESTED_ACTION, { action: action.action, title: action.title })} className="w-full bg-gray-600 hover:bg-gray-700 justify-start">
-                        {action.title}
-                    </CardButton>
-                ))}
+    const handleFeedback = (isGood: boolean) => {
+        setFeedbackGiven(true); // Optimistic UI update
+        onAction(ActionType.ANALYSIS_FEEDBACK, { messageId, isGood });
+    };
+
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-white">Discrepancy Analysis</h3>
+            <ul className="mt-2 space-y-2">
+                <li className="flex items-center space-x-2 p-2 bg-gray-700/50 rounded-md">
+                    <XCircleIcon />
+                    <span className="text-gray-300 flex-grow">Data Quality Issues</span>
+                    <span className="font-semibold text-white">{payload.dataQuality}</span>
+                </li>
+                <li className="flex items-center space-x-2 p-2 bg-gray-700/50 rounded-md">
+                    <ExclamationCircleIcon />
+                    <span className="text-gray-300 flex-grow">Configuration/Logic Problems</span>
+                    <span className="font-semibold text-white">{payload.logic}</span>
+                </li>
+            </ul>
+            <div className="flex space-x-2 mt-4">
+                <CardButton onClick={() => onAction(ActionType.VIEW_METABASE_REPORT)} className="bg-sky-600 hover:bg-sky-700">View on Metabase <ExternalLinkIcon /></CardButton>
+                <CardButton onClick={() => onAction(ActionType.INVESTIGATE_ROOT_CAUSE, { testId: payload.testId, guideId: payload.guideId, messageId })}>Find Root Cause & Suggestions</CardButton>
+            </div>
+            {/* Feedback Section */}
+            <div className="mt-4 pt-3 border-t border-gray-700 flex justify-end items-center space-x-3">
+                {feedbackGiven ? (
+                     <p className="text-xs text-gray-400 italic">Thank you for your feedback!</p>
+                ) : (
+                    <>
+                        <span className="text-sm text-gray-400">Was this analysis helpful?</span>
+                        <button onClick={() => handleFeedback(true)} className="text-gray-400 hover:text-green-400 transition-colors" aria-label="Good analysis">
+                            <ThumbsUpIcon />
+                        </button>
+                        <button onClick={() => handleFeedback(false)} className="text-gray-400 hover:text-red-400 transition-colors" aria-label="Bad analysis">
+                            <ThumbsDownIcon />
+                        </button>
+                    </>
+                )}
             </div>
         </div>
-    </div>
-);
+    );
+};
+
+const RootCauseAnalysisCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [feedbackGiven, setFeedbackGiven] = useState(payload.feedbackGiven || false);
+
+    const handleFeedback = (isGood: boolean) => {
+        setFeedbackGiven(true); // Optimistic UI update
+        onAction(ActionType.ROOT_CAUSE_FEEDBACK, { messageId, isGood });
+    };
+
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-white flex items-center"><LightBulbIcon /><span className="ml-2">Root Cause Analysis</span></h3>
+            <div className="mt-3 p-3 bg-gray-900/70 rounded-md">
+                <p className="text-sm text-gray-300">
+                    <span className="font-semibold text-yellow-400">Probable Cause: </span>
+                    {payload.cause}
+                </p>
+            </div>
+            <div className="mt-4">
+                <h4 className="font-semibold text-gray-200">Suggested Actions</h4>
+                <div className="mt-2 space-y-2">
+                    {payload.suggestedActions.map((action: {title: string, action: string}) => (
+                        <CardButton key={action.action} onClick={() => onAction(ActionType.SUGGESTED_ACTION, { action: action.action, title: action.title })} className="w-full bg-gray-600 hover:bg-gray-700 justify-start">
+                            {action.title}
+                        </CardButton>
+                    ))}
+                </div>
+            </div>
+            {/* Feedback Section */}
+            <div className="mt-4 pt-3 border-t border-gray-700 flex justify-end items-center space-x-3">
+                {feedbackGiven ? (
+                     <p className="text-xs text-gray-400 italic">Thank you for your feedback!</p>
+                ) : (
+                    <>
+                        <span className="text-sm text-gray-400">Was this helpful?</span>
+                        <button onClick={() => handleFeedback(true)} className="text-gray-400 hover:text-green-400 transition-colors" aria-label="Good analysis">
+                            <ThumbsUpIcon />
+                        </button>
+                        <button onClick={() => handleFeedback(false)} className="text-gray-400 hover:text-red-400 transition-colors" aria-label="Bad analysis">
+                            <ThumbsDownIcon />
+                        </button>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+};
 
 
 const InteractiveDiagnosticCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => (
@@ -713,10 +1121,23 @@ const SopGuideCard: React.FC<{ payload: any, onAction: CardRendererProps['onActi
                                     {isCompleted ? <CheckCircleIcon className="h-6 w-6 text-green-400" /> : <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${isActive && !isSuperseded ? 'bg-indigo-500 text-white' : 'bg-gray-600 text-gray-300'}`}>{step.id}</div>}
                                     <span className={`ml-3 font-medium ${isCompleted ? 'text-gray-400 line-through' : 'text-white'}`}>{step.title}</span>
                                 </div>
-                                {isActive && step.action && (
-                                    <CardButton onClick={() => onAction(step.action, { guideId: payload.guideId, messageId })} disabled={isSuperseded}>
-                                        Start Step {step.id}
-                                    </CardButton>
+                                {isActive && !isSuperseded && (
+                                    <div className="flex items-center space-x-2 shrink-0">
+                                        {currentStep > 1 && (
+                                            <CardButton
+                                                onClick={() => onAction(ActionType.REWIND_SOP_STEP, { guideId: payload.guideId, messageId })}
+                                                className="bg-gray-600 hover:bg-gray-700 text-xs py-1 px-3"
+                                                disabled={isSuperseded}
+                                            >
+                                                Previous Step
+                                            </CardButton>
+                                        )}
+                                        {step.action && (
+                                            <CardButton onClick={() => onAction(step.action, { guideId: payload.guideId, messageId })} disabled={isSuperseded}>
+                                                Start Step {step.id}
+                                            </CardButton>
+                                        )}
+                                    </div>
                                 )}
                            </div>
                         </div>
@@ -804,6 +1225,225 @@ const BenchmarkListCard: React.FC<{ payload: BenchmarkDataset, onAction: CardRen
     );
 };
 
+const JsonImporterCard: React.FC<{ onAction: CardRendererProps['onAction'], messageId: number }> = ({ onAction, messageId }) => {
+    const [jsonString, setJsonString] = useState('');
+    const [error, setError] = useState('');
+
+    const handleImport = () => {
+        if (!jsonString.trim()) {
+            setError('JSON input cannot be empty.');
+            return;
+        }
+        try {
+            // Sanitize input: attempt to remove common errors like trailing commas
+            const sanitizedJsonString = jsonString.replace(/,\s*([}\]])/g, '$1');
+            
+            JSON.parse(sanitizedJsonString); // Validate the sanitized string
+            setError('');
+            // Pass the sanitized (and now validated) string to the action handler
+            onAction(ActionType.IMPORT_JSON_CONFIG, { messageId, jsonString: sanitizedJsonString });
+        } catch (e) {
+            setError('Invalid JSON format. Please check for syntax errors.');
+        }
+    };
+
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-white flex items-center"><ImportIcon /><span className="ml-2">Import Configuration from JSON</span></h3>
+            <p className="text-gray-300 mt-1">Paste your raw JSON configuration below. The tool will convert it into a bot-managed configuration and auto-generate a corresponding template.</p>
+            <div className="mt-4">
+                <textarea
+                    value={jsonString}
+                    onChange={(e) => setJsonString(e.target.value)}
+                    placeholder='{ "yourKey": "yourValue", ... }'
+                    rows={10}
+                    className="w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white font-mono text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+            </div>
+            <div className="flex justify-end mt-3">
+                <CardButton onClick={handleImport}>Import and Generate</CardButton>
+            </div>
+        </div>
+    );
+};
+
+const TemplateEditorCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [template, setTemplate] = useState(payload.template);
+    const [isSaved, setIsSaved] = useState(payload.isSaved || false);
+
+    const handleSave = () => {
+        onAction(ActionType.SAVE_GENERATED_TEMPLATE, { messageId, template });
+        setIsSaved(true);
+    };
+    
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-white flex items-center"><TemplateIcon /><span className="ml-2">Generated Template Editor</span></h3>
+            <p className="text-gray-300 mt-1">A template has been generated from your JSON. Review and save it to the library.</p>
+            
+            <div className="mt-4 space-y-3">
+                <div>
+                    <label htmlFor={`template-name-${messageId}`} className="block text-sm font-medium text-gray-300">Template Name</label>
+                    <input 
+                        type="text" 
+                        id={`template-name-${messageId}`} 
+                        value={template.templateName} 
+                        onChange={(e) => setTemplate({ ...template, templateName: e.target.value })}
+                        className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 sm:text-sm" 
+                        disabled={isSaved}
+                    />
+                </div>
+                <div>
+                    <label htmlFor={`template-desc-${messageId}`} className="block text-sm font-medium text-gray-300">Description</label>
+                    <textarea 
+                        id={`template-desc-${messageId}`} 
+                        value={template.description} 
+                        onChange={(e) => setTemplate({ ...template, description: e.target.value })}
+                        rows={2}
+                        className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 sm:text-sm" 
+                        disabled={isSaved}
+                    />
+                </div>
+                <div>
+                    <h4 className="text-sm font-medium text-gray-300">Inferred Schema</h4>
+                    <div className="mt-1 p-3 bg-gray-900/50 border border-gray-700 rounded-md text-xs font-mono text-gray-400 space-y-1">
+                        {Object.entries(template.settingsSchema).map(([key, value]) => (
+                            <div key={key}><span className="text-sky-400">{key}</span>: <span className="text-yellow-400">{`"${value}"`}</span></div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+                {isSaved ? (
+                     <div className="flex items-center space-x-2 text-green-400 font-semibold">
+                        <CheckCircleIcon />
+                        <span>Template Saved!</span>
+                     </div>
+                ) : (
+                    <CardButton onClick={handleSave} disabled={!template.templateName || !template.description}>
+                        Save Template
+                    </CardButton>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [benchmark, setBenchmark] = useState<Partial<BenchmarkDataset>>({
+        projectName: payload?.projectName || '',
+        timeliness: 'Last 3 Months',
+    });
+    const [vendors, setVendors] = useState('');
+    const [error, setError] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleChange = (field: keyof BenchmarkDataset, value: any) => {
+        setBenchmark(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleVendorFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            if (text) {
+                // Handle CSV (comma-separated) and TXT (newline-separated)
+                const vendorsArray = text
+                    .replace(/\r\n/g, '\n') // Standardize newlines
+                    .split(/[\n,]+/)        // Split by newline or comma
+                    .map(v => v.trim())
+                    .filter(Boolean);      // Remove empty strings
+                setVendors(vendorsArray.join(', '));
+            }
+        };
+        reader.readAsText(file);
+
+        // Allow re-uploading the same file
+        if (event.target) {
+            event.target.value = '';
+        }
+    };
+
+    const handleSave = () => {
+        if (!benchmark.id || !benchmark.projectName || !benchmark.description) {
+            setError('ID, Project Name, and Description are required.');
+            return;
+        }
+        setError('');
+        const coveredVendors = vendors.split(',').map(v => v.trim()).filter(Boolean);
+        const finalBenchmark = {
+            ...benchmark,
+            dataVolume: Number(benchmark.dataVolume) || 0,
+            vendorCount: coveredVendors.length,
+            coveredVendors,
+        };
+        onAction(ActionType.SUBMIT_BENCHMARK_WIZARD, { messageId, benchmark: finalBenchmark });
+    };
+    
+    const commonInputClass = "mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm";
+
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-white flex items-center"><AddDatabaseIcon /><span className="ml-2">Add Golden Benchmark</span></h3>
+            <p className="text-gray-300 mt-1">Define a new benchmark dataset for testing and validation.</p>
+            <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor={`bm-id-${messageId}`} className="block text-sm font-medium text-gray-300">Benchmark ID</label>
+                        <input type="text" id={`bm-id-${messageId}`} value={benchmark.id || ''} onChange={e => handleChange('id', e.target.value)} className={commonInputClass} placeholder="e.g., BM-AV-02" />
+                    </div>
+                    <div>
+                        <label htmlFor={`bm-project-${messageId}`} className="block text-sm font-medium text-gray-300">Project Name</label>
+                        <input type="text" id={`bm-project-${messageId}`} value={benchmark.projectName || ''} onChange={e => handleChange('projectName', e.target.value)} className={commonInputClass} placeholder="e.g., AutoVouch" />
+                    </div>
+                </div>
+                <div>
+                    <label htmlFor={`bm-desc-${messageId}`} className="block text-sm font-medium text-gray-300">Description</label>
+                    <textarea id={`bm-desc-${messageId}`} value={benchmark.description || ''} onChange={e => handleChange('description', e.target.value)} rows={2} className={commonInputClass}></textarea>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor={`bm-volume-${messageId}`} className="block text-sm font-medium text-gray-300">Data Volume (Records)</label>
+                        <input type="number" id={`bm-volume-${messageId}`} value={benchmark.dataVolume || ''} onChange={e => handleChange('dataVolume', e.target.value)} className={commonInputClass} placeholder="e.g., 50000" />
+                    </div>
+                     <div>
+                        <label htmlFor={`bm-time-${messageId}`} className="block text-sm font-medium text-gray-300">Timeliness</label>
+                        <select id={`bm-time-${messageId}`} value={benchmark.timeliness || 'Last 3 Months'} onChange={e => handleChange('timeliness', e.target.value)} className={commonInputClass}>
+                            <option>Last 1 Month</option>
+                            <option>Last 3 Months</option>
+                            <option>Last 6 Months</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <label htmlFor={`bm-vendors-${messageId}`} className="block text-sm font-medium text-gray-300">Covered Vendors</label>
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                        >
+                            <UploadIcon />
+                            <span className="ml-1">Upload List (.csv, .txt)</span>
+                        </button>
+                    </div>
+                    <input type="file" ref={fileInputRef} onChange={handleVendorFileUpload} className="hidden" accept=".csv,.txt" />
+                    <textarea id={`bm-vendors-${messageId}`} value={vendors} onChange={e => setVendors(e.target.value)} rows={3} className={commonInputClass} placeholder="Enter comma-separated vendor IDs or upload a file..."></textarea>
+                </div>
+                {error && <p className="text-red-400 text-sm">{error}</p>}
+            </div>
+             <div className="flex justify-end mt-4">
+                <CardButton onClick={handleSave}>Save Benchmark</CardButton>
+            </div>
+        </div>
+    );
+};
+
 
 export const CardRenderer: React.FC<CardRendererProps> = ({ card, onAction, messageId, allConfigs = [], allTemplates = [], allBenchmarks = [] }) => {
   const cardMap: { [key in CardType]?: React.ReactNode } = {
@@ -813,17 +1453,20 @@ export const CardRenderer: React.FC<CardRendererProps> = ({ card, onAction, mess
     [CardType.TEMPLATE_SELECTOR]: <TemplateSelectorCard payload={card.payload} onAction={onAction} allTemplates={allTemplates} messageId={messageId} />,
     [CardType.CONFIG_SELECTOR]: <ConfigSelectorCard payload={card.payload} onAction={onAction} allConfigs={allConfigs} messageId={messageId} />,
     [CardType.CONFIG_WIZARD]: <ConfigWizardCard payload={card.payload} onAction={onAction} messageId={messageId}/>,
-    [CardType.CONFIG_DETAILS]: <ConfigDetailsCard payload={card.payload} />,
+    [CardType.CONFIG_DETAILS]: <ConfigDetailsCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.TEST_STARTER]: <TestStarterCard payload={card.payload} onAction={onAction} messageId={messageId} allBenchmarks={allBenchmarks || []} />,
     [CardType.TEST_RESULTS_SUMMARY]: <TestResultsSummaryCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.ANALYSIS_RESULTS]: <AnalysisResultsCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.ROOT_CAUSE_ANALYSIS]: <RootCauseAnalysisCard payload={card.payload} onAction={onAction} />,
+    [CardType.ROOT_CAUSE_ANALYSIS]: <RootCauseAnalysisCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.INTERACTIVE_DIAGNOSTIC]: <InteractiveDiagnosticCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.CONFIRMATION]: <ConfirmationCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.ALERT]: <AlertCard payload={card.payload} />,
     [CardType.FILE_UPLOAD]: <FileUploadCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.SOP_GUIDE]: <SopGuideCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.BENCHMARK_LIST]: <BenchmarkListCard payload={card.payload} onAction={onAction} />,
+    [CardType.JSON_IMPORTER]: <JsonImporterCard onAction={onAction} messageId={messageId} />,
+    [CardType.TEMPLATE_EDITOR]: <TemplateEditorCard payload={card.payload} onAction={onAction} messageId={messageId} />,
+    [CardType.BENCHMARK_WIZARD]: <BenchmarkWizardCard payload={card.payload} onAction={onAction} messageId={messageId} />,
   };
 
   const Component = cardMap[card.type];
