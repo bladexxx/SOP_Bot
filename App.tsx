@@ -3,7 +3,7 @@ import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, 
 import { CardRenderer } from './components/CardRenderer';
 import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
-import { GoogleGenAI } from '@google/genai';
+import { generateContentFromPrompt } from './services/aiService';
 import { triggerNiFiFlow } from './services/nifiService';
 
 const mockConfigsData: Configuration[] = [
@@ -399,9 +399,6 @@ const App: React.FC = () => {
         setIsLoading(true);
 
         try {
-            // FIX: Use process.env.API_KEY as per the coding guidelines. This resolves the TypeScript error.
-            const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-
             const context = `
                 AVAILABLE CONFIGURATIONS: ${JSON.stringify(configs, null, 2)}
                 AVAILABLE BENCHMARKS: ${JSON.stringify(benchmarks, null, 2)}
@@ -417,18 +414,14 @@ const App: React.FC = () => {
                 USER QUESTION:
                 ${userInput}
             `;
-
-            const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: prompt,
-            });
             
-            const geminiText = response.text;
+            const geminiText = await generateContentFromPrompt(prompt);
             addMessage({ actor: Actor.BOT, content: geminiText, isGemini: true });
 
         } catch (error) {
-            console.error("Error calling Gemini API:", error);
-            addMessage({ actor: Actor.BOT, content: "Sorry, I had trouble connecting to the AI assistant. Please check the console for details.", isGemini: true });
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            console.error("Error calling AI Service:", error);
+            addMessage({ actor: Actor.BOT, content: `Sorry, I had trouble connecting to the AI assistant. Please check the console and your environment variables. Error: ${errorMessage}`, isGemini: true });
         } finally {
             setIsLoading(false);
         }
