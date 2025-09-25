@@ -4,6 +4,7 @@ import { CardRenderer } from './components/CardRenderer';
 import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
 import { GoogleGenAI } from '@google/genai';
+import { triggerNiFiFlow } from './services/nifiService';
 
 const mockConfigsData: Configuration[] = [
   {
@@ -408,7 +409,7 @@ const App: React.FC = () => {
             `;
 
             const prompt = `
-                SYSTEM INSTRUCTION: You are an expert AI assistant for the Teams SOP Bot Simulator. Your role is to help users understand their data and activities. Use the provided context to answer questions about configurations, benchmark data, test results, and conversation history. Be concise and helpful.
+                SYSTEM INSTRUCTION: You are an expert AI assistant for the FlowX SOP Bot. Your role is to help users understand their data and activities. Use the provided context to answer questions about configurations, benchmark data, test results, and conversation history. Be concise and helpful.
                 ---
                 CONTEXT:
                 ${context}
@@ -706,19 +707,29 @@ const App: React.FC = () => {
             case ActionType.START_BATCH_TEST:
                 if (payload.path) {
                     addMessage({ actor: Actor.USER, content: `Start batch test from: ${payload.path}` });
-                    addMessage({ actor: Actor.BOT, content: `Starting test on batch data from ${payload.path} against benchmark ${payload.benchmarkId}. This may take a moment...` });
-                    await new Promise(res => setTimeout(res, 4000));
-                    addMessage({
-                        actor: Actor.BOT,
-                        content: "Batch test complete. Here are the results:",
-                        card: {
-                            type: CardType.TEST_RESULTS_SUMMARY,
-                            payload: { project: 'Batch Process', matched: 1250, mismatched: 75, testId: 'TID-BATCH-001', guideId: payload?.guideId, benchmarkId: payload.benchmarkId }
+                    addMessage({ actor: Actor.BOT, content: `Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
+                    try {
+                        const result = await triggerNiFiFlow({
+                            path: payload.path,
+                            benchmarkId: payload.benchmarkId,
+                            config: payload.config
+                        });
+
+                        addMessage({
+                            actor: Actor.BOT,
+                            content: "NiFi flow complete. Here are the results:",
+                            card: {
+                                type: CardType.TEST_RESULTS_SUMMARY,
+                                payload: { project: payload.config.projectName, matched: result.matched, mismatched: result.mismatched, testId: `TID-NIFI-${Date.now()}`, guideId: payload?.guideId, benchmarkId: payload.benchmarkId }
+                            }
+                        });
+                        if (payload?.guideId) {
+                            addMessage({ actor: Actor.BOT, content: "Test complete. Here is the next step." });
+                            advanceSopGuide(payload.guideId);
                         }
-                    });
-                    if (payload?.guideId) {
-                        addMessage({ actor: Actor.BOT, content: "Test complete. Here is the next step." });
-                        advanceSopGuide(payload.guideId);
+                    } catch (error) {
+                        console.error("NiFi Flow Error:", error);
+                        addMessage({ actor: Actor.BOT, content: `❌ Error: The NiFi job failed. Reason: ${error}` });
                     }
                 } else {
                     addMessage({ actor: Actor.USER, content: "Run Verification Test" });
@@ -745,19 +756,30 @@ const App: React.FC = () => {
             case ActionType.RUN_TEST_WITH_FILE:
                 addMessage({ actor: Actor.USER, content: `Run test with file: ${payload.file.name}` });
                 updateCardInMessage(payload.messageId, { status: 'submitted' });
-                addMessage({ actor: Actor.BOT, content: `Uploading and processing ${payload.file.name} against benchmark ${payload.benchmarkId}...` });
-                await new Promise(res => setTimeout(res, 4000));
-                addMessage({
-                    actor: Actor.BOT,
-                    content: "Single file test complete. Here are the results:",
-                    card: {
-                        type: CardType.TEST_RESULTS_SUMMARY,
-                        payload: { project: 'Single File Test', matched: 85, mismatched: 15, testId: 'TID-SINGLE-556', guideId: payload?.guideId, benchmarkId: payload.benchmarkId }
+                addMessage({ actor: Actor.BOT, content: `File uploaded. Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
+                
+                try {
+                    const result = await triggerNiFiFlow({
+                        file: payload.file,
+                        benchmarkId: payload.benchmarkId,
+                        config: payload.config
+                    });
+            
+                    addMessage({
+                        actor: Actor.BOT,
+                        content: "NiFi flow complete. Here are the results:",
+                        card: {
+                            type: CardType.TEST_RESULTS_SUMMARY,
+                            payload: { project: payload.config.projectName, matched: result.matched, mismatched: result.mismatched, testId: `TID-NIFI-${Date.now()}`, guideId: payload?.guideId, benchmarkId: payload.benchmarkId }
+                        }
+                    });
+                    if (payload?.guideId) {
+                        addMessage({ actor: Actor.BOT, content: "Test complete. Here is the next step." });
+                        advanceSopGuide(payload.guideId);
                     }
-                });
-                if (payload?.guideId) {
-                    addMessage({ actor: Actor.BOT, content: "Test complete. Here is the next step." });
-                    advanceSopGuide(payload.guideId);
+                } catch (error) {
+                    console.error("NiFi Flow Error:", error);
+                    addMessage({ actor: Actor.BOT, content: `❌ Error: The NiFi job failed. Reason: ${error}` });
                 }
                 break;
              case ActionType.DOWNLOAD_REPORT:
@@ -917,7 +939,7 @@ const App: React.FC = () => {
                 cards={mockFlashcards}
             />
             <header className="bg-gray-800 p-4 shadow-md z-20 flex justify-between items-center">
-                <h1 className="text-xl font-bold">Teams SOP Bot Simulator</h1>
+                <h1 className="text-xl font-bold">FlowX SOP Bot</h1>
                 <div className="flex items-center space-x-4">
                     <button 
                         onClick={() => setIsFlashcardModalOpen(true)}
@@ -972,7 +994,7 @@ const App: React.FC = () => {
                             <div className={`flex flex-col ${msg.actor === Actor.USER ? 'items-end' : 'items-start'}`}>
                                 <div className={`flex items-center space-x-2 ${msg.actor === Actor.USER ? 'flex-row-reverse space-x-reverse' : ''}`}>
                                     {msg.isGemini && <GeminiIcon className="h-4 w-4 text-purple-400" />}
-                                    <span className="font-bold text-sm">{msg.actor === Actor.BOT ? (msg.isGemini ? 'SOP Bot (AI)' : 'SOP Bot') : 'You'}</span>
+                                    <span className="font-bold text-sm">{msg.actor === Actor.BOT ? (msg.isGemini ? 'FlowX SOP Bot (AI)' : 'FlowX SOP Bot') : 'You'}</span>
                                     <span className="text-xs text-gray-500">{msg.timestamp}</span>
                                 </div>
                                 <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
@@ -988,7 +1010,7 @@ const App: React.FC = () => {
                             <BotIcon />
                             <div className="flex flex-col items-start">
                                 <div className="flex items-center space-x-2">
-                                    <span className="font-bold text-sm">SOP Bot</span>
+                                    <span className="font-bold text-sm">FlowX SOP Bot</span>
                                 </div>
                                 <div className="mt-2 flex items-center space-x-2 px-4 py-2 bg-gray-700 rounded-lg">
                                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>

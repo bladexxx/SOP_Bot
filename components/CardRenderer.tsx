@@ -111,7 +111,7 @@ const WelcomeCard: React.FC<{ onAction: CardRendererProps['onAction'] }> = ({ on
 
     return (
         <div>
-            <h3 className="font-bold text-lg text-white">Welcome to the SOP Bot!</h3>
+            <h3 className="font-bold text-lg text-white">Welcome to the FlowX SOP Bot!</h3>
             <p className="text-gray-300 mt-1">This self-service SOP bot helps you perform end-to-end validation, functional, regression, performance, and stress testing for your TDS automation workflows.</p>
             <div className="mt-4">
                  <CardButton onClick={() => onAction(ActionType.SHOW_SOP_CHOOSER)} className="w-full bg-indigo-600 hover:bg-indigo-700">
@@ -750,7 +750,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files[0]) {
             const file = event.target.files[0];
-            onAction(ActionType.RUN_TEST_WITH_FILE, { messageId, file, guideId: payload.guideId, benchmarkId: selectedBenchmarkId });
+            onAction(ActionType.RUN_TEST_WITH_FILE, { messageId, file, guideId: payload.guideId, benchmarkId: selectedBenchmarkId, config: payload.config });
         }
     };
     
@@ -797,7 +797,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
                     <p className="text-xs text-gray-400 mt-1">Specify the FTP, SFTP, or local path for batch data processing.</p>
                     <input type="text" id={`batch-path-${messageId}`} value={path} onChange={(e) => setPath(e.target.value)} className="mt-2 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
                     <div className="flex justify-end mt-2">
-                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, guideId: payload.guideId, messageId, benchmarkId: selectedBenchmarkId })} disabled={!path || !selectedBenchmarkId}>
+                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, guideId: payload.guideId, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path || !selectedBenchmarkId}>
                             Start Batch Test
                         </CardButton>
                     </div>
