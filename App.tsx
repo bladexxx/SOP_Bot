@@ -494,15 +494,36 @@ const App: React.FC = () => {
                 addMessage({ actor: Actor.USER, content: "Add new Golden Benchmark" });
                 addMessage({ actor: Actor.BOT, card: { type: CardType.BENCHMARK_WIZARD, payload: { projectName: payload?.projectName } } });
                 break;
-            case ActionType.SUBMIT_BENCHMARK_WIZARD:
+            case ActionType.SUBMIT_BENCHMARK_WIZARD: {
                 addMessage({ actor: Actor.USER, content: `Save benchmark: ${payload.benchmark.id}` });
-                // eslint-disable-next-line no-case-declarations
                 const newBenchmark = payload.benchmark as BenchmarkDataset;
-                setBenchmarks(prev => [...prev, newBenchmark]);
-                updateCardInMessage(payload.messageId, { isSaved: true });
-                addMessage({ actor: Actor.BOT, content: `Benchmark "${newBenchmark.id}" saved successfully.` });
-                addMessage({ actor: Actor.BOT, card: { type: CardType.BENCHMARK_LIST, payload: newBenchmark } });
+                
+                let isUpdate = false;
+                setBenchmarks(prev => {
+                    const existingIndex = prev.findIndex(b => b.id === newBenchmark.id);
+                    if (existingIndex !== -1) {
+                        isUpdate = true;
+                        const updatedBenchmarks = [...prev];
+                        updatedBenchmarks[existingIndex] = newBenchmark;
+                        return updatedBenchmarks;
+                    }
+                    return [...prev, newBenchmark];
+                });
+
+                updateCardInMessage(payload.messageId, {
+                    isSaved: true,
+                    benchmark: newBenchmark,
+                    projectName: newBenchmark.projectName,
+                });
+
+                if (isUpdate) {
+                    addMessage({ actor: Actor.BOT, content: `Benchmark "${newBenchmark.id}" updated successfully.` });
+                } else {
+                    addMessage({ actor: Actor.BOT, content: `Benchmark "${newBenchmark.id}" saved successfully.` });
+                    addMessage({ actor: Actor.BOT, card: { type: CardType.BENCHMARK_LIST, payload: newBenchmark } });
+                }
                 break;
+            }
             case ActionType.SHOW_JSON_IMPORTER:
                  addMessage({ actor: Actor.USER, content: "Import Config from JSON" });
                  addMessage({ actor: Actor.BOT, card: { type: CardType.JSON_IMPORTER } });

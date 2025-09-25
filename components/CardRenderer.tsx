@@ -1331,14 +1331,36 @@ const TemplateEditorCard: React.FC<{ payload: any, onAction: CardRendererProps['
     );
 };
 
-const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const [benchmark, setBenchmark] = useState<Partial<BenchmarkDataset>>({
-        projectName: payload?.projectName || '',
-        timeliness: 'Last 3 Months',
-    });
+const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number, allConfigs?: Configuration[] }> = ({ payload, onAction, messageId, allConfigs = [] }) => {
+    const [benchmark, setBenchmark] = useState<Partial<BenchmarkDataset>>({});
     const [vendors, setVendors] = useState('');
     const [error, setError] = useState('');
+    const [isSaved, setIsSaved] = useState(payload?.isSaved || false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // This effect ensures the component's state is synchronized with the payload from App.tsx
+    // This is important for when the card is re-rendered after a save action.
+    useEffect(() => {
+        setIsSaved(payload?.isSaved || false);
+        setBenchmark(payload?.benchmark || {
+            projectName: payload?.projectName || '',
+            timeliness: 'Last 3 Months',
+        });
+        setVendors((payload?.benchmark?.coveredVendors || []).join(', '));
+    }, [payload]);
+
+    const projectNames = useMemo(() => {
+        const uniqueNames = new Set(allConfigs.map(c => c.projectName));
+        return Array.from(uniqueNames).sort();
+    }, [allConfigs]);
+
+    // Effect to set a default project name if the list is available and none is set
+    useEffect(() => {
+        if (!benchmark.projectName && projectNames.length > 0) {
+            setBenchmark(prev => ({ ...prev, projectName: projectNames[0] }));
+        }
+    }, [projectNames, benchmark.projectName]);
+
 
     const handleChange = (field: keyof BenchmarkDataset, value: any) => {
         setBenchmark(prev => ({ ...prev, [field]: value }));
@@ -1376,16 +1398,24 @@ const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps[
         }
         setError('');
         const coveredVendors = vendors.split(',').map(v => v.trim()).filter(Boolean);
-        const finalBenchmark = {
-            ...benchmark,
+        const finalBenchmark: BenchmarkDataset = {
+            id: benchmark.id,
+            projectName: benchmark.projectName,
+            description: benchmark.description,
             dataVolume: Number(benchmark.dataVolume) || 0,
+            timeliness: benchmark.timeliness || 'Last 3 Months',
             vendorCount: coveredVendors.length,
             coveredVendors,
         };
         onAction(ActionType.SUBMIT_BENCHMARK_WIZARD, { messageId, benchmark: finalBenchmark });
     };
+
+    const handleEdit = () => {
+        setIsSaved(false);
+    };
     
     const commonInputClass = "mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm";
+    const disabledClass = isSaved ? "disabled:bg-gray-800/50 disabled:cursor-not-allowed disabled:text-gray-400" : "";
 
     return (
         <div>
@@ -1395,25 +1425,36 @@ const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps[
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor={`bm-id-${messageId}`} className="block text-sm font-medium text-gray-300">Benchmark ID</label>
-                        <input type="text" id={`bm-id-${messageId}`} value={benchmark.id || ''} onChange={e => handleChange('id', e.target.value)} className={commonInputClass} placeholder="e.g., BM-AV-02" />
+                        <input type="text" id={`bm-id-${messageId}`} value={benchmark.id || ''} onChange={e => handleChange('id', e.target.value)} className={`${commonInputClass} ${disabledClass}`} placeholder="e.g., BM-AV-02" disabled={isSaved} />
                     </div>
                     <div>
                         <label htmlFor={`bm-project-${messageId}`} className="block text-sm font-medium text-gray-300">Project Name</label>
-                        <input type="text" id={`bm-project-${messageId}`} value={benchmark.projectName || ''} onChange={e => handleChange('projectName', e.target.value)} className={commonInputClass} placeholder="e.g., AutoVouch" />
+                         <select
+                            id={`bm-project-${messageId}`}
+                            value={benchmark.projectName || ''}
+                            onChange={e => handleChange('projectName', e.target.value)}
+                            className={`${commonInputClass} ${disabledClass}`}
+                            disabled={isSaved}
+                        >
+                            <option value="" disabled>Select a project</option>
+                            {projectNames.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
                 <div>
                     <label htmlFor={`bm-desc-${messageId}`} className="block text-sm font-medium text-gray-300">Description</label>
-                    <textarea id={`bm-desc-${messageId}`} value={benchmark.description || ''} onChange={e => handleChange('description', e.target.value)} rows={2} className={commonInputClass}></textarea>
+                    <textarea id={`bm-desc-${messageId}`} value={benchmark.description || ''} onChange={e => handleChange('description', e.target.value)} rows={2} className={`${commonInputClass} ${disabledClass}`} disabled={isSaved}></textarea>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor={`bm-volume-${messageId}`} className="block text-sm font-medium text-gray-300">Data Volume (Records)</label>
-                        <input type="number" id={`bm-volume-${messageId}`} value={benchmark.dataVolume || ''} onChange={e => handleChange('dataVolume', e.target.value)} className={commonInputClass} placeholder="e.g., 50000" />
+                        <input type="number" id={`bm-volume-${messageId}`} value={benchmark.dataVolume || ''} onChange={e => handleChange('dataVolume', e.target.value)} className={`${commonInputClass} ${disabledClass}`} placeholder="e.g., 50000" disabled={isSaved} />
                     </div>
                      <div>
                         <label htmlFor={`bm-time-${messageId}`} className="block text-sm font-medium text-gray-300">Timeliness</label>
-                        <select id={`bm-time-${messageId}`} value={benchmark.timeliness || 'Last 3 Months'} onChange={e => handleChange('timeliness', e.target.value)} className={commonInputClass}>
+                        <select id={`bm-time-${messageId}`} value={benchmark.timeliness || 'Last 3 Months'} onChange={e => handleChange('timeliness', e.target.value as BenchmarkDataset['timeliness'])} className={`${commonInputClass} ${disabledClass}`} disabled={isSaved}>
                             <option>Last 1 Month</option>
                             <option>Last 3 Months</option>
                             <option>Last 6 Months</option>
@@ -1426,19 +1467,24 @@ const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps[
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex items-center text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                            className="flex items-center text-xs text-indigo-400 hover:text-indigo-300 font-semibold disabled:text-gray-500 disabled:cursor-not-allowed"
+                            disabled={isSaved}
                         >
                             <UploadIcon />
                             <span className="ml-1">Upload List (.csv, .txt)</span>
                         </button>
                     </div>
-                    <input type="file" ref={fileInputRef} onChange={handleVendorFileUpload} className="hidden" accept=".csv,.txt" />
-                    <textarea id={`bm-vendors-${messageId}`} value={vendors} onChange={e => setVendors(e.target.value)} rows={3} className={commonInputClass} placeholder="Enter comma-separated vendor IDs or upload a file..."></textarea>
+                    <input type="file" ref={fileInputRef} onChange={handleVendorFileUpload} className="hidden" accept=".csv,.txt" disabled={isSaved} />
+                    <textarea id={`bm-vendors-${messageId}`} value={vendors} onChange={e => setVendors(e.target.value)} rows={3} className={`${commonInputClass} ${disabledClass}`} placeholder="Enter comma-separated vendor IDs or upload a file..." disabled={isSaved}></textarea>
                 </div>
                 {error && <p className="text-red-400 text-sm">{error}</p>}
             </div>
              <div className="flex justify-end mt-4">
-                <CardButton onClick={handleSave}>Save Benchmark</CardButton>
+                {isSaved ? (
+                    <CardButton onClick={handleEdit} className="bg-gray-600 hover:bg-gray-700">Edit Benchmark</CardButton>
+                ) : (
+                    <CardButton onClick={handleSave}>Save Benchmark</CardButton>
+                )}
             </div>
         </div>
     );
@@ -1466,7 +1512,7 @@ export const CardRenderer: React.FC<CardRendererProps> = ({ card, onAction, mess
     [CardType.BENCHMARK_LIST]: <BenchmarkListCard payload={card.payload} onAction={onAction} />,
     [CardType.JSON_IMPORTER]: <JsonImporterCard onAction={onAction} messageId={messageId} />,
     [CardType.TEMPLATE_EDITOR]: <TemplateEditorCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.BENCHMARK_WIZARD]: <BenchmarkWizardCard payload={card.payload} onAction={onAction} messageId={messageId} />,
+    [CardType.BENCHMARK_WIZARD]: <BenchmarkWizardCard payload={card.payload} onAction={onAction} messageId={messageId} allConfigs={allConfigs} />,
   };
 
   const Component = cardMap[card.type];
