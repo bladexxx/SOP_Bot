@@ -15,7 +15,6 @@ export enum CardType {
   CONFIRMATION = 'confirmation',
   ALERT = 'alert',
   FILE_UPLOAD = 'file_upload',
-  SOP_GUIDE = 'sop_guide',
   TEST_STARTER = 'test_starter',
   ROOT_CAUSE_ANALYSIS = 'root_cause_analysis',
   BENCHMARK_LIST = 'benchmark_list',

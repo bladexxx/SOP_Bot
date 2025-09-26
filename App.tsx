@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard } from './types';
 import { CardRenderer } from './components/CardRenderer';
-import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon } from './components/Icons';
+import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
-import { generateContentFromPrompt } from './services/aiService';
+import { DemoGuideModal } from './components/DemoGuideModal';
+import { generateContentFromPrompt, generateFlashcardsFromText } from './services/aiService';
 import { triggerNiFiFlow } from './services/nifiService';
+import { sopDefinitions } from './components/SopTimeline';
 
 const mockConfigsData: Configuration[] = [
   {
@@ -201,12 +203,21 @@ const App: React.FC = () => {
     const [searchResults, setSearchResults] = useState<Configuration[]>([]);
     const [showSearchResults, setShowSearchResults] = useState(false);
     const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
+    const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+    const [knowledgeBase, setKnowledgeBase] = useState<string>('');
+    const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLDivElement>(null);
+    const knowledgeFileInputRef = useRef<HTMLInputElement>(null);
+    const initialized = useRef(false);
 
     const [configs, setConfigs] = useState<Configuration[]>(mockConfigsData);
     const [templates, setTemplates] = useState<ConfigTemplate[]>(mockTemplatesData);
     const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
+    
+    // Using a ref for handleCardAction to prevent stale closures in triggerSopStep
+    const handleCardActionRef = useRef<(action: ActionType, payload?: any) => Promise<void>>();
+
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -268,11 +279,86 @@ const App: React.FC = () => {
         }));
     }, []);
 
+    const triggerSopStep = useCallback((sopContext: any, additionalPayload: any = {}) => {
+        const { sopType, currentStep } = sopContext;
+        const sop = sopDefinitions[sopType];
+        if (!sop) {
+            console.error("SOP definition not found for type:", sopType);
+            return;
+        }
+
+        const currentStepIndex = currentStep - 1;
+
+        const showCompletionMessage = () => {
+            addMessage({
+                actor: Actor.BOT,
+                content: `You have successfully completed the "${sop.title}" SOP. You can start a new task or type a command.`,
+            });
+        };
+        
+        if (currentStepIndex < sop.steps.length) {
+            const step = sop.steps[currentStepIndex];
+            if (step.action) {
+                if (handleCardActionRef.current) {
+                     handleCardActionRef.current(step.action, {
+                        ...additionalPayload,
+                        sopContext: sopContext,
+                    });
+                }
+            } else {
+                // This is a terminal step with no action, SOP is complete.
+                showCompletionMessage();
+            }
+        } else {
+            // This means the SOP is finished.
+            showCompletionMessage();
+        }
+    }, [addMessage]);
+
     const handleBotResponse = useCallback(async (userInput: string) => {
         setIsLoading(true);
+
+        const lowerInput = userInput.toLowerCase().trim();
+
+        // Handle specific commands first
+        if (lowerInput === 'help') {
+            addMessage({
+                actor: Actor.BOT,
+                content: `Here are the available commands:
+
+• help: Show this help message.
+• welcome: Display the welcome card.
+• clean / clear: Clear the chat and refresh the app.
+• tips: Show helpful tips and common commands.
+• new config: Start the configuration creation wizard.
+• run test: Start the test execution flow.
+• show benchmarks for [Project Name]: List benchmark datasets.
+• find [Query]: Search for a configuration.`
+            });
+            setIsLoading(false);
+            return;
+        }
+
+        if (lowerInput === 'welcome') {
+            addMessage({ actor: Actor.BOT, card: { type: CardType.WELCOME } });
+            setIsLoading(false);
+            return;
+        }
+        
+        if (lowerInput === 'clean' || lowerInput === 'clear') {
+            window.location.reload();
+            return;
+        }
+        
+        if (lowerInput === 'tips') {
+            addMessage({ actor: Actor.BOT, content: "Opening helpful tips..." });
+            setIsFlashcardModalOpen(true);
+            setIsLoading(false);
+            return;
+        }
+        
         await new Promise(res => setTimeout(res, 1000));
 
-        const lowerInput = userInput.toLowerCase();
         const words = lowerInput.replace(/[,.]/g, '').split(' ');
 
         if (lowerInput.includes('benchmark') || lowerInput.includes('golden')) {
@@ -366,20 +452,23 @@ const App: React.FC = () => {
         }
 
         setIsLoading(false);
-    }, [addMessage, configs, benchmarks]);
+    }, [addMessage, configs, benchmarks, setIsFlashcardModalOpen]);
 
     useEffect(() => {
-        const initialBotMessage = () => {
-            setIsLoading(true);
-            setTimeout(() => {
-                addMessage({
-                    actor: Actor.BOT,
-                    card: { type: CardType.WELCOME }
-                });
-                setIsLoading(false);
-            }, 1000);
-        };
-        initialBotMessage();
+        if (!initialized.current) {
+            initialized.current = true;
+            const initialBotMessage = () => {
+                setIsLoading(true);
+                setTimeout(() => {
+                    addMessage({
+                        actor: Actor.BOT,
+                        card: { type: CardType.WELCOME }
+                    });
+                    setIsLoading(false);
+                }, 1000);
+            };
+            initialBotMessage();
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -403,10 +492,11 @@ const App: React.FC = () => {
                 AVAILABLE CONFIGURATIONS: ${JSON.stringify(configs, null, 2)}
                 AVAILABLE BENCHMARKS: ${JSON.stringify(benchmarks, null, 2)}
                 CONVERSATION HISTORY (last 10): ${messages.slice(-10).map(m => `${m.actor === Actor.BOT ? 'BOT' : 'USER'}: ${m.content || '(Interactive Card)'}`).join('\n')}
+                ${knowledgeBase ? `--- \nUSER-PROVIDED KNOWLEDGE BASE:\n${knowledgeBase}` : ''}
             `;
 
             const prompt = `
-                SYSTEM INSTRUCTION: You are an expert AI assistant for the FlowX SOP Bot. Your role is to help users understand their data and activities. Use the provided context to answer questions about configurations, benchmark data, test results, and conversation history. Be concise and helpful.
+                SYSTEM INSTRUCTION: You are an expert AI assistant for the FlowX SOP Bot. Your role is to help users understand their data and activities. Use the provided context, ESPECIALLY THE USER-PROVIDED KNOWLEDGE BASE, to answer questions about configurations, business rules, benchmark data, test results, and conversation history. Prioritize information from the knowledge base. Be concise and helpful.
                 ---
                 CONTEXT:
                 ${context}
@@ -427,61 +517,98 @@ const App: React.FC = () => {
         }
     };
 
+    const updateFlashcardsFromKnowledgeBase = useCallback(async (newKnowledge: string) => {
+        addMessage({
+            actor: Actor.BOT,
+            content: "Analyzing document to generate new tips..."
+        });
+        
+        try {
+            const newCardsData = await generateFlashcardsFromText(newKnowledge);
+            const validNewCards = newCardsData.filter(card => card.question && card.answer);
+            
+            if (validNewCards.length > 0) {
+                const newFlashcardsWithIds = validNewCards.map((card, index) => ({
+                    ...card,
+                    id: 100 + Date.now() + index 
+                }));
+                
+                setGeneratedFlashcards(newFlashcardsWithIds);
 
-    const handleCardAction = async (action: ActionType, payload?: any) => {
+                addMessage({
+                    actor: Actor.BOT,
+                    content: `I've analyzed the document and generated ${newFlashcardsWithIds.length} new flashcards for you. You can view them by clicking 'Tips' or typing 'tips'.`
+                });
+            } else {
+                 addMessage({
+                    actor: Actor.BOT,
+                    content: "I analyzed the document, but couldn't find any new key concepts to create flashcards from."
+                });
+                 setGeneratedFlashcards([]); // Clear any old ones
+            }
+        } catch (error) {
+            console.error("Failed to update flashcards:", error);
+            addMessage({
+                actor: Actor.BOT,
+                content: "Sorry, I had trouble generating new tips from that document. The default tips are still available."
+            });
+        }
+    }, [addMessage]);
+
+    const handleKnowledgeFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (file.type !== 'text/markdown' && !file.name.endsWith('.md')) {
+            addMessage({
+                actor: Actor.BOT,
+                content: "Sorry, I can only accept Markdown (.md) files for the knowledge base at this time."
+            });
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            if (text) {
+                const newKnowledgeContent = '\n\n--- KNOWLEDGE DOCUMENT: ' + file.name + ' ---\n\n' + text;
+                const fullKnowledgeBase = knowledgeBase + newKnowledgeContent;
+                setKnowledgeBase(fullKnowledgeBase);
+
+                addMessage({
+                    actor: Actor.BOT,
+                    content: `Successfully added "${file.name}" to the knowledge base. The AI will now use this context.`
+                });
+
+                updateFlashcardsFromKnowledgeBase(fullKnowledgeBase);
+            }
+        };
+        reader.onerror = () => {
+             addMessage({
+                actor: Actor.BOT,
+                content: `There was an error reading the file "${file.name}". Please try again.`
+            });
+        };
+        reader.readAsText(file);
+
+        // Reset file input to allow uploading the same file again
+        if (event.target) {
+            event.target.value = '';
+        }
+    };
+
+
+    const handleCardAction = useCallback(async (action: ActionType, payload?: any) => {
         setIsLoading(true);
         
-        // Finds the latest, active SOP guide card to prevent acting on an outdated one.
-        const findSopMessage = (guideId: number) => messages.slice().reverse().find(msg => 
-            msg.card?.type === CardType.SOP_GUIDE && 
-            msg.card?.payload?.guideId === guideId &&
-            msg.card?.payload?.status !== 'superseded'
-        );
-
-        // Deactivates the old SOP guide and posts a new, updated one, merging any new payload data.
-        const advanceSopGuide = (guideId: number, additionalPayload: object = {}) => {
-            const sopMessage = findSopMessage(guideId);
-            if (sopMessage && sopMessage.card) {
-                // Deactivate the old card in the message history.
-                updateCardInMessage(sopMessage.id, { ...sopMessage.card.payload, status: 'superseded' });
-
-                // Prepare the payload for the new, updated card.
-                const newPayload = {
-                    ...sopMessage.card.payload,
-                    ...additionalPayload, // Merge new data like selectedConfig
-                    currentStep: (sopMessage.card.payload.currentStep || 1) + 1,
-                    status: 'active' // Ensure new card is active
-                };
-
-                // Add the new card to the conversation.
-                addMessage({
-                    actor: Actor.BOT,
-                    card: { type: CardType.SOP_GUIDE, payload: newPayload }
-                });
+        const checkAndAdvanceSop = (currentSopContext: any, additionalPayload: object = {}) => {
+            if (currentSopContext) {
+                const nextStepContext = { ...currentSopContext, currentStep: currentSopContext.currentStep + 1 };
+                // Pass along any data gathered from the current step, like a selected config
+                const mergedPayload = { ...payload, ...additionalPayload };
+                triggerSopStep(nextStepContext, mergedPayload);
             }
         };
-        
-        const rewindSopGuide = (guideId: number) => {
-            const sopMessage = findSopMessage(guideId);
-            if (sopMessage && sopMessage.card) {
-                // Deactivate the current card.
-                updateCardInMessage(sopMessage.id, { ...sopMessage.card.payload, status: 'superseded' });
-
-                // Prepare the payload for the previous step.
-                const newPayload = {
-                    ...sopMessage.card.payload,
-                    currentStep: (sopMessage.card.payload.currentStep || 1) - 1,
-                    status: 'active'
-                };
-
-                // Add the new "rewound" card.
-                addMessage({
-                    actor: Actor.BOT,
-                    card: { type: CardType.SOP_GUIDE, payload: newPayload }
-                });
-            }
-        };
-
 
         switch(action) {
             case ActionType.SHOW_BENCHMARK_WIZARD:
@@ -520,7 +647,7 @@ const App: React.FC = () => {
             }
             case ActionType.SHOW_JSON_IMPORTER:
                  addMessage({ actor: Actor.USER, content: "Import Config from JSON" });
-                 addMessage({ actor: Actor.BOT, card: { type: CardType.JSON_IMPORTER } });
+                 addMessage({ actor: Actor.BOT, card: { type: CardType.JSON_IMPORTER, payload } });
                  break;
             case ActionType.IMPORT_JSON_CONFIG:
                 addMessage({ actor: Actor.USER, content: "Imported JSON Configuration" });
@@ -570,8 +697,12 @@ const App: React.FC = () => {
                 addMessage({ actor: Actor.BOT, content: `Template "${payload.template.templateName}" has been saved to the library.` });
                 break;
             case ActionType.REWIND_SOP_STEP:
-                addMessage({ actor: Actor.USER, content: "Go back to the previous step" });
-                rewindSopGuide(payload.guideId);
+                 addMessage({ actor: Actor.USER, content: "Go back to the previous step" });
+                 const { sopContext } = payload;
+                 if (sopContext && sopContext.currentStep > 1) {
+                     const prevStepContext = { ...sopContext, currentStep: sopContext.currentStep - 1 };
+                     triggerSopStep(prevStepContext);
+                 }
                 break;
             case ActionType.SHOW_FLASHCARDS:
                 setIsFlashcardModalOpen(true);
@@ -582,13 +713,15 @@ const App: React.FC = () => {
                 break;
             case ActionType.START_SOP:
                 addMessage({ actor: Actor.USER, content: `Selected SOP: ${payload.sopTitle}`});
-                addMessage({
-                    actor: Actor.BOT,
-                    card: {
-                        type: CardType.SOP_GUIDE,
-                        payload: { guideId: Date.now(), sopType: payload.sopType, sopTitle: payload.sopTitle, currentStep: 1 }
-                    }
-                });
+                const newSopContext = {
+                    guideId: Date.now(),
+                    sopType: payload.sopType,
+                    sopTitle: payload.sopTitle,
+                    currentStep: 1,
+                    // Store any data gathered so far
+                    data: {}
+                };
+                triggerSopStep(newSopContext);
                 break;
             case ActionType.SHOW_CONFIG_SELECTOR:
                 addMessage({ actor: Actor.USER, content: "Select Existing Configuration" });
@@ -596,7 +729,7 @@ const App: React.FC = () => {
                     actor: Actor.BOT,
                     card: {
                         type: CardType.CONFIG_SELECTOR,
-                        payload: { guideId: payload?.guideId, source: payload?.source }
+                        payload: payload
                     }
                 });
                 break;
@@ -604,16 +737,11 @@ const App: React.FC = () => {
                  addMessage({ actor: Actor.USER, content: `Selected config: ${payload.selectedConfig.projectName} ${payload.selectedConfig.vendorId || ''}` });
                  updateCardInMessage(payload.messageId, { status: 'selected' });
                  
-                 if (payload.source === 'clone') {
+                 if (payload.sopContext) {
+                    checkAndAdvanceSop(payload.sopContext, { selectedConfig: payload.selectedConfig });
+                 } else if (payload.source === 'clone') {
                     addMessage({ actor: Actor.BOT, content: "Starting wizard with cloned data..." });
-                    addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_WIZARD, payload: { step: 1, data: { clonedData: payload.selectedConfig, guideId: payload.guideId } } } });
-                    setIsLoading(false);
-                    return;
-                 }
-
-                 if (payload.guideId) {
-                    addMessage({ actor: Actor.BOT, content: "Configuration selected. Here is the next step." });
-                    advanceSopGuide(payload.guideId, { selectedConfig: payload.selectedConfig });
+                    addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_WIZARD, payload: { step: 1, data: { clonedData: payload.selectedConfig, sopContext: payload.sopContext } } } });
                  } else if (payload.source === 'quickAction') {
                     addMessage({ actor: Actor.BOT, content: "Great. Now, how do you want to provide the test data?" });
                     addMessage({ actor: Actor.BOT, card: { type: CardType.TEST_STARTER, payload: { config: payload.selectedConfig } } });
@@ -625,17 +753,17 @@ const App: React.FC = () => {
                     actor: Actor.BOT,
                     card: {
                         type: CardType.CONFIG_CREATOR_CHOOSER,
-                        payload: { guideId: payload?.guideId }
+                        payload: payload
                     }
                  });
                 break;
             case ActionType.START_FROM_TEMPLATE:
                 addMessage({ actor: Actor.USER, content: "Create config from template" });
-                addMessage({ actor: Actor.BOT, card: { type: CardType.TEMPLATE_SELECTOR, payload: { guideId: payload?.guideId } } });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.TEMPLATE_SELECTOR, payload: payload } });
                 break;
             case ActionType.START_CLONE:
                 addMessage({ actor: Actor.USER, content: "Clone existing config" });
-                addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_SELECTOR, payload: { source: 'clone', guideId: payload?.guideId } } });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_SELECTOR, payload: { source: 'clone', sopContext: payload.sopContext } } });
                 break;
             case ActionType.SELECT_TEMPLATE:
                 addMessage({ actor: Actor.USER, content: `Selected template: ${payload.selectedTemplate.templateName}` });
@@ -645,7 +773,7 @@ const App: React.FC = () => {
                     actor: Actor.BOT,
                     card: {
                         type: CardType.CONFIG_WIZARD,
-                        payload: { step: 1, data: { template: payload.selectedTemplate, guideId: payload.guideId } }
+                        payload: { step: 1, data: { template: payload.selectedTemplate, sopContext: payload.sopContext } }
                     }
                 });
                 break;
@@ -673,9 +801,8 @@ const App: React.FC = () => {
                     };
                     addMessage({ actor: Actor.BOT, content: `Configuration for ${data.projectName} ${data.vendorId ? `(${data.vendorId})` : ''} submitted successfully!`});
                     
-                    if (data.guideId) {
-                        addMessage({ actor: Actor.BOT, content: "Configuration saved. Here is the next step." });
-                        advanceSopGuide(data.guideId, { selectedConfig: newConfig });
+                    if (data.sopContext) {
+                        checkAndAdvanceSop(data.sopContext, { selectedConfig: newConfig });
                     }
                 }
                 break;
@@ -698,7 +825,8 @@ const App: React.FC = () => {
                  addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_SELECTOR, payload: { source: 'quickAction' } } });
                 break;
             case ActionType.START_BATCH_TEST:
-                if (payload.path) {
+                // This action is overloaded: it can be called to show the starter card, or to actually run the test
+                if (payload.path) { // A path means we are running the test
                     addMessage({ actor: Actor.USER, content: `Start batch test from: ${payload.path}` });
                     addMessage({ actor: Actor.BOT, content: `Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
                     try {
@@ -713,36 +841,28 @@ const App: React.FC = () => {
                             content: "NiFi flow complete. Here are the results:",
                             card: {
                                 type: CardType.TEST_RESULTS_SUMMARY,
-                                payload: { project: payload.config.projectName, matched: result.matched, mismatched: result.mismatched, testId: `TID-NIFI-${Date.now()}`, guideId: payload?.guideId, benchmarkId: payload.benchmarkId }
+                                payload: { project: payload.config.projectName, matched: result.matched, mismatched: result.mismatched, testId: `TID-NIFI-${Date.now()}`, sopContext: payload.sopContext, benchmarkId: payload.benchmarkId }
                             }
                         });
-                        if (payload?.guideId) {
-                            addMessage({ actor: Actor.BOT, content: "Test complete. Here is the next step." });
-                            advanceSopGuide(payload.guideId);
-                        }
+                        checkAndAdvanceSop(payload.sopContext);
                     } catch (error) {
                         console.error("NiFi Flow Error:", error);
                         addMessage({ actor: Actor.BOT, content: `❌ Error: The NiFi job failed. Reason: ${error}` });
                     }
-                } else {
+                } else { // No path means we need to show the starter card
                     addMessage({ actor: Actor.USER, content: "Run Verification Test" });
-                    const sopMessage = findSopMessage(payload.guideId);
-                    if (sopMessage) {
-                        const config = sopMessage.card?.payload?.selectedConfig;
-                        if (config) {
-                             addMessage({
-                                actor: Actor.BOT,
-                                content: "Please provide the data for the test.",
-                                card: {
-                                    type: CardType.TEST_STARTER,
-                                    payload: { guideId: payload.guideId, config: config }
-                                }
-                            });
-                        } else {
-                             addMessage({ actor: Actor.BOT, content: "Error: No configuration was selected or created in the previous step." });
-                        }
+                    const config = payload.selectedConfig;
+                    if (config) {
+                         addMessage({
+                            actor: Actor.BOT,
+                            content: "Please provide the data for the test.",
+                            card: {
+                                type: CardType.TEST_STARTER,
+                                payload: { sopContext: payload.sopContext, config: config }
+                            }
+                        });
                     } else {
-                        addMessage({ actor: Actor.BOT, content: "Error: Could not find the associated SOP Guide." });
+                         addMessage({ actor: Actor.BOT, content: "Error: No configuration was selected or created in the previous step." });
                     }
                 }
                 break;
@@ -763,13 +883,10 @@ const App: React.FC = () => {
                         content: "NiFi flow complete. Here are the results:",
                         card: {
                             type: CardType.TEST_RESULTS_SUMMARY,
-                            payload: { project: payload.config.projectName, matched: result.matched, mismatched: result.mismatched, testId: `TID-NIFI-${Date.now()}`, guideId: payload?.guideId, benchmarkId: payload.benchmarkId }
+                            payload: { project: payload.config.projectName, matched: result.matched, mismatched: result.mismatched, testId: `TID-NIFI-${Date.now()}`, sopContext: payload.sopContext, benchmarkId: payload.benchmarkId }
                         }
                     });
-                    if (payload?.guideId) {
-                        addMessage({ actor: Actor.BOT, content: "Test complete. Here is the next step." });
-                        advanceSopGuide(payload.guideId);
-                    }
+                    checkAndAdvanceSop(payload.sopContext);
                 } catch (error) {
                     console.error("NiFi Flow Error:", error);
                     addMessage({ actor: Actor.BOT, content: `❌ Error: The NiFi job failed. Reason: ${error}` });
@@ -787,13 +904,10 @@ const App: React.FC = () => {
                     actor: Actor.BOT,
                     card: {
                         type: CardType.ANALYSIS_RESULTS,
-                        payload: { dataQuality: 12, logic: 3, testId: payload.testId, guideId: payload?.guideId }
+                        payload: { dataQuality: 12, logic: 3, testId: payload.testId, sopContext: payload.sopContext }
                     }
                 });
-                 if (payload?.guideId) {
-                    addMessage({ actor: Actor.BOT, content: "Analysis complete. Here is the next step." });
-                    advanceSopGuide(payload.guideId);
-                 }
+                checkAndAdvanceSop(payload.sopContext);
                 break;
             case ActionType.ANALYSIS_FEEDBACK:
                 addMessage({ actor: Actor.USER, content: `Feedback on analysis: ${payload.isGood ? 'Helpful' : 'Not helpful'}` });
@@ -822,14 +936,12 @@ const App: React.FC = () => {
                                 { title: "Refresh Vendor Master Data & Rerun Test", action: "REFRESH_DATA" },
                                 { title: "Adjust Config Threshold for this Vendor", action: "ADJUST_CONFIG" },
                                 { title: "Escalate to Data Stewardship Team", action: "ESCALATE" }
-                            ]
+                            ],
+                             sopContext: payload.sopContext
                         }
                     }
                 });
-                 if (payload?.guideId) {
-                    addMessage({ actor: Actor.BOT, content: "Investigation complete. Here is the next step." });
-                    advanceSopGuide(payload.guideId);
-                 }
+                 checkAndAdvanceSop(payload.sopContext);
                 break;
              case ActionType.ROOT_CAUSE_FEEDBACK:
                 addMessage({ actor: Actor.USER, content: `Feedback on root cause: ${payload.isGood ? 'Helpful' : 'Not helpful'}` });
@@ -856,7 +968,7 @@ const App: React.FC = () => {
                             recordId: payload?.recordId || 'CM-123', 
                             data: { 'invoice_amount': 100.50, 'system_amount': 95.50, 'rule_applied': 'RULE-005' }, 
                             status: 'new',
-                            guideId: payload?.guideId
+                            sopContext: payload.sopContext
                         }
                     }
                  });
@@ -881,12 +993,10 @@ const App: React.FC = () => {
                     updateCardInMessage(payload.messageId, { status: 'processing' });
                     await new Promise(res => setTimeout(res, 3000)); // Simulate processing
                     updateCardInMessage(payload.messageId, { status: 'complete', result: 'File processed. Standardized 56 rows.' });
-                    if (payload.guideId) {
-                        advanceSopGuide(payload.guideId);
-                    }
+                    checkAndAdvanceSop(payload.sopContext);
                  } else {
                     addMessage({ actor: Actor.USER, content: "Upload Data File" });
-                    addMessage({ actor: Actor.BOT, card: { type: CardType.FILE_UPLOAD, payload: { status: 'idle', guideId: payload?.guideId } } });
+                    addMessage({ actor: Actor.BOT, card: { type: CardType.FILE_UPLOAD, payload: { status: 'idle', sopContext: payload.sopContext } } });
                  }
                  break;
             case ActionType.VIEW_BENCHMARK_DETAILS:
@@ -909,7 +1019,11 @@ const App: React.FC = () => {
         }
 
         setIsLoading(false);
-    };
+    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, updateFlashcardsFromKnowledgeBase, knowledgeBase]);
+    
+    useEffect(() => {
+        handleCardActionRef.current = handleCardAction;
+    }, [handleCardAction]);
 
     const handleSearchResultClick = (config: Configuration) => {
         addMessage({
@@ -929,11 +1043,23 @@ const App: React.FC = () => {
             <FlashcardModal 
                 isOpen={isFlashcardModalOpen} 
                 onClose={() => setIsFlashcardModalOpen(false)}
-                cards={mockFlashcards}
+                cards={[...mockFlashcards, ...generatedFlashcards]}
+            />
+            <DemoGuideModal 
+                isOpen={isDemoModalOpen}
+                onClose={() => setIsDemoModalOpen(false)}
             />
             <header className="bg-gray-800 p-4 shadow-md z-20 flex justify-between items-center">
                 <h1 className="text-xl font-bold">FlowX SOP Bot</h1>
                 <div className="flex items-center space-x-4">
+                     <button 
+                        onClick={() => setIsDemoModalOpen(true)}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                        aria-label="Show demo guide"
+                    >
+                        <PlayCircleIcon />
+                        <span className="text-sm font-medium hidden md:block">Demo</span>
+                    </button>
                     <button 
                         onClick={() => setIsFlashcardModalOpen(true)}
                         className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
@@ -991,7 +1117,7 @@ const App: React.FC = () => {
                                     <span className="text-xs text-gray-500">{msg.timestamp}</span>
                                 </div>
                                 <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
-                                    {msg.content && <div className={`px-4 py-2 rounded-lg inline-block ${msg.isGemini ? 'bg-purple-900/50 border border-purple-700' : (msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600')}`}>{msg.content}</div>}
+                                    {msg.content && <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.isGemini ? 'bg-purple-900/50 border border-purple-700' : (msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600')}`}>{msg.content}</div>}
                                     {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={configs} allTemplates={templates} allBenchmarks={benchmarks} />}
                                 </div>
                             </div>
@@ -1019,7 +1145,19 @@ const App: React.FC = () => {
             <footer className="bg-gray-800 p-4 border-t border-gray-700 z-10">
                 <div className="max-w-3xl mx-auto">
                     <div className="flex items-center bg-gray-700 rounded-lg p-2">
-                        <button className="p-2 text-gray-400 hover:text-white transition-colors" onClick={() => handleCardAction(ActionType.UPLOAD_FILE)}>
+                        <input
+                            type="file"
+                            ref={knowledgeFileInputRef}
+                            onChange={handleKnowledgeFileChange}
+                            className="hidden"
+                            accept=".md,text/markdown"
+                        />
+                        <button 
+                            className="p-2 text-gray-400 hover:text-white transition-colors"
+                            onClick={() => knowledgeFileInputRef.current?.click()}
+                            title="Upload Knowledge Document (.md)"
+                            aria-label="Upload Knowledge Document"
+                        >
                             <PaperclipIcon />
                         </button>
                         <input

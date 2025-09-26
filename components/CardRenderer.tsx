@@ -1,6 +1,7 @@
 import React, { useState, ChangeEvent, useRef, useMemo, useEffect } from 'react';
 import { Card, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate } from '../types';
 import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon, ThumbsUpIcon, ThumbsDownIcon, ImportIcon, AddDatabaseIcon, UploadIcon } from './Icons';
+import { SopTimeline } from './SopTimeline';
 
 interface CardRendererProps {
   card: Card;
@@ -197,7 +198,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
         <p className="text-gray-300 mt-1">How would you like to start?</p>
         <div className="mt-4 grid grid-cols-1 gap-3">
             <button
-                onClick={() => onAction(ActionType.START_FROM_TEMPLATE, { guideId: payload.guideId })}
+                onClick={() => onAction(ActionType.START_FROM_TEMPLATE, { sopContext: payload.sopContext })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
                 <div className="flex items-center">
@@ -207,7 +208,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
                 <p className="text-sm text-gray-400 mt-1">Use a pre-defined schema for a specific project.</p>
             </button>
             <button
-                onClick={() => onAction(ActionType.START_CLONE, { guideId: payload.guideId })}
+                onClick={() => onAction(ActionType.START_CLONE, { sopContext: payload.sopContext })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
                 <div className="flex items-center">
@@ -217,7 +218,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
                 <p className="text-sm text-gray-400 mt-1">Copy and modify an existing configuration.</p>
             </button>
             <button
-                onClick={() => onAction(ActionType.SHOW_JSON_IMPORTER, { guideId: payload.guideId })}
+                onClick={() => onAction(ActionType.SHOW_JSON_IMPORTER, { sopContext: payload.sopContext })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
                 <div className="flex items-center">
@@ -750,7 +751,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files[0]) {
             const file = event.target.files[0];
-            onAction(ActionType.RUN_TEST_WITH_FILE, { messageId, file, guideId: payload.guideId, benchmarkId: selectedBenchmarkId, config: payload.config });
+            onAction(ActionType.RUN_TEST_WITH_FILE, { messageId, file, sopContext: payload.sopContext, benchmarkId: selectedBenchmarkId, config: payload.config });
         }
     };
     
@@ -797,7 +798,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
                     <p className="text-xs text-gray-400 mt-1">Specify the FTP, SFTP, or local path for batch data processing.</p>
                     <input type="text" id={`batch-path-${messageId}`} value={path} onChange={(e) => setPath(e.target.value)} className="mt-2 block w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
                     <div className="flex justify-end mt-2">
-                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, guideId: payload.guideId, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path || !selectedBenchmarkId}>
+                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, sopContext: payload.sopContext, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path || !selectedBenchmarkId}>
                             Start Batch Test
                         </CardButton>
                     </div>
@@ -850,7 +851,7 @@ const TestResultsSummaryCard: React.FC<{ payload: any, onAction: CardRendererPro
         </div>
         <div className="flex space-x-2 mt-4">
             <CardButton onClick={() => onAction(ActionType.DOWNLOAD_REPORT)}>Download Report</CardButton>
-            <CardButton onClick={() => onAction(ActionType.TRIGGER_ANALYSIS, { testId: payload.testId, guideId: payload.guideId, messageId })}>Analyze Discrepancies</CardButton>
+            <CardButton onClick={() => onAction(ActionType.TRIGGER_ANALYSIS, { testId: payload.testId, sopContext: payload.sopContext, messageId })}>Analyze Discrepancies</CardButton>
         </div>
     </div>
 );
@@ -880,7 +881,7 @@ const AnalysisResultsCard: React.FC<{ payload: any, onAction: CardRendererProps[
             </ul>
             <div className="flex space-x-2 mt-4">
                 <CardButton onClick={() => onAction(ActionType.VIEW_METABASE_REPORT)} className="bg-sky-600 hover:bg-sky-700">View on Metabase <ExternalLinkIcon /></CardButton>
-                <CardButton onClick={() => onAction(ActionType.INVESTIGATE_ROOT_CAUSE, { testId: payload.testId, guideId: payload.guideId, messageId })}>Find Root Cause & Suggestions</CardButton>
+                <CardButton onClick={() => onAction(ActionType.INVESTIGATE_ROOT_CAUSE, { testId: payload.testId, sopContext: payload.sopContext, messageId })}>Find Root Cause & Suggestions</CardButton>
             </div>
             {/* Feedback Section */}
             <div className="mt-4 pt-3 border-t border-gray-700 flex justify-end items-center space-x-3">
@@ -968,7 +969,7 @@ const InteractiveDiagnosticCard: React.FC<{ payload: any, onAction: CardRenderer
             </div>
         ) : (
             <div className="flex space-x-2 mt-4">
-                <CardButton onClick={() => onAction(ActionType.RERUN_DIAGNOSTIC, { messageId, ruleToDisable: 'RULE-005', guideId: payload.guideId })}>Rerun (Disable RULE-005)</CardButton>
+                <CardButton onClick={() => onAction(ActionType.RERUN_DIAGNOSTIC, { messageId, ruleToDisable: 'RULE-005', sopContext: payload.sopContext })}>Rerun (Disable RULE-005)</CardButton>
             </div>
         )}
     </div>
@@ -1007,7 +1008,7 @@ const FileUploadCard: React.FC<{ payload: any, onAction: CardRendererProps['onAc
         if (event.target.files && event.target.files[0]) {
             const file = event.target.files[0];
             setFileName(file.name);
-            onAction(ActionType.UPLOAD_FILE, { messageId, file, guideId: payload.guideId });
+            onAction(ActionType.UPLOAD_FILE, { messageId, file, sopContext: payload.sopContext });
         }
     };
 
@@ -1049,105 +1050,6 @@ const FileUploadCard: React.FC<{ payload: any, onAction: CardRendererProps['onAc
                 <div className="mt-4 flex items-center space-x-2 text-green-400">
                     <CheckCircleIcon />
                     <span>{payload.result}</span>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const SopGuideCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const currentStep = payload.currentStep || 1;
-    const isSuperseded = payload.status === 'superseded';
-
-    const sopDefinitions: { [key: string]: { title: string, steps: { id: number, title: string, action: ActionType | null }[] } } = {
-        'NEW_CONFIG_SINGLE': {
-            title: 'Unit & Functional Testing',
-            steps: [
-                { id: 1, title: "Create or Modify Configuration", action: ActionType.START_CONFIG },
-                { id: 2, title: "Run Verification Test", action: ActionType.START_BATCH_TEST },
-                { id: 3, title: "Analyze Discrepancies", action: ActionType.TRIGGER_ANALYSIS },
-                { id: 4, title: "Complete Verification", action: null }
-            ]
-        },
-        'NEW_CONFIG_BATCH': {
-            title: 'Full Regression & Performance Test',
-            steps: [
-                { id: 1, title: "Create or Select Configuration", action: ActionType.START_CONFIG },
-                { id: 2, title: "Run Batch Test", action: ActionType.START_BATCH_TEST },
-                { id: 3, title: "Analyze Discrepancies", action: ActionType.TRIGGER_ANALYSIS },
-                { id: 4, title: "Complete Verification", action: null }
-            ]
-        },
-        'EXISTING_CONFIG_SINGLE': {
-            title: 'Regression Testing',
-            steps: [
-                { id: 1, title: "Select Existing Configuration", action: ActionType.SHOW_CONFIG_SELECTOR },
-                { id: 2, title: "Run Verification Test", action: ActionType.START_BATCH_TEST },
-                { id: 3, title: "Analyze Discrepancies", action: ActionType.TRIGGER_ANALYSIS },
-                { id: 4, title: "Complete Verification", action: null }
-            ]
-        },
-        'EXISTING_CONFIG_BATCH': {
-            title: 'End-to-End Business Validation',
-            steps: [
-                { id: 1, title: "Select Existing Configuration", action: ActionType.SHOW_CONFIG_SELECTOR },
-                { id: 2, title: "Run Batch Test", action: ActionType.START_BATCH_TEST },
-                { id: 3, title: "Analyze Discrepancies", action: ActionType.TRIGGER_ANALYSIS },
-                { id: 4, title: "Complete Verification", action: null }
-            ]
-        }
-    };
-    
-    const sop = sopDefinitions[payload.sopType] || sopDefinitions['NEW_CONFIG_SINGLE'];
-    const guideTitle = payload.sopTitle || sop.title;
-
-    return (
-        <div>
-            <h3 className={`font-bold text-lg flex items-center ${isSuperseded ? 'text-gray-500' : 'text-white'}`}>
-                <BookOpenIcon />
-                <span className="ml-2">SOP Guide: {guideTitle}</span>
-                {isSuperseded && <span className="ml-2 text-xs font-semibold text-gray-500">(Outdated)</span>}
-            </h3>
-            <p className={`text-sm mt-1 ${isSuperseded ? 'text-gray-600' : 'text-gray-400'}`}>Follow these steps to complete the process.</p>
-            <div className={`mt-4 space-y-3 ${isSuperseded ? 'opacity-60' : ''}`}>
-                {sop.steps.map(step => {
-                    const isCompleted = step.id < currentStep;
-                    const isActive = step.id === currentStep;
-                    
-                    return (
-                        <div key={step.id} className={`p-3 rounded-lg transition-all ${isActive && !isSuperseded ? 'bg-indigo-900/50 border border-indigo-500' : 'bg-gray-700/50'}`}>
-                           <div className="flex justify-between items-center">
-                                <div className="flex items-center">
-                                    {isCompleted ? <CheckCircleIcon className="h-6 w-6 text-green-400" /> : <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${isActive && !isSuperseded ? 'bg-indigo-500 text-white' : 'bg-gray-600 text-gray-300'}`}>{step.id}</div>}
-                                    <span className={`ml-3 font-medium ${isCompleted ? 'text-gray-400 line-through' : 'text-white'}`}>{step.title}</span>
-                                </div>
-                                {isActive && !isSuperseded && (
-                                    <div className="flex items-center space-x-2 shrink-0">
-                                        {currentStep > 1 && (
-                                            <CardButton
-                                                onClick={() => onAction(ActionType.REWIND_SOP_STEP, { guideId: payload.guideId, messageId })}
-                                                className="bg-gray-600 hover:bg-gray-700 text-xs py-1 px-3"
-                                                disabled={isSuperseded}
-                                            >
-                                                Previous Step
-                                            </CardButton>
-                                        )}
-                                        {step.action && (
-                                            <CardButton onClick={() => onAction(step.action, { guideId: payload.guideId, messageId })} disabled={isSuperseded}>
-                                                Start Step {step.id}
-                                            </CardButton>
-                                        )}
-                                    </div>
-                                )}
-                           </div>
-                        </div>
-                    );
-                })}
-            </div>
-            {currentStep > sop.steps.length && (
-                 <div className="mt-4 p-3 rounded-lg bg-green-900/50 border border-green-500 text-center">
-                    <p className="font-semibold text-green-300">SOP Complete!</p>
-                    <p className="text-sm text-green-400">The process has been successfully completed.</p>
                 </div>
             )}
         </div>
@@ -1508,7 +1410,6 @@ export const CardRenderer: React.FC<CardRendererProps> = ({ card, onAction, mess
     [CardType.CONFIRMATION]: <ConfirmationCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.ALERT]: <AlertCard payload={card.payload} />,
     [CardType.FILE_UPLOAD]: <FileUploadCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.SOP_GUIDE]: <SopGuideCard payload={card.payload} onAction={onAction} messageId={messageId} />,
     [CardType.BENCHMARK_LIST]: <BenchmarkListCard payload={card.payload} onAction={onAction} />,
     [CardType.JSON_IMPORTER]: <JsonImporterCard onAction={onAction} messageId={messageId} />,
     [CardType.TEMPLATE_EDITOR]: <TemplateEditorCard payload={card.payload} onAction={onAction} messageId={messageId} />,
@@ -1516,10 +1417,16 @@ export const CardRenderer: React.FC<CardRendererProps> = ({ card, onAction, mess
   };
 
   const Component = cardMap[card.type];
+  const sopContext = card.payload?.sopContext;
 
   if (!Component) {
     return <div className="text-red-500">Error: Unknown card type "{card.type}"</div>;
   }
 
-  return <div className="p-4 bg-gray-800 border border-gray-700 rounded-lg shadow-lg">{Component}</div>;
+  return (
+    <div className="p-4 bg-gray-800 border border-gray-700 rounded-lg shadow-lg">
+      {sopContext && <SopTimeline {...sopContext} onAction={onAction} sopContext={sopContext} />}
+      {Component}
+    </div>
+  );
 };

@@ -1,4 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
+import { Flashcard } from '../types';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
@@ -63,5 +64,68 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
         });
 
         return genAIResponse.text;
+    }
+};
+
+/**
+ * Analyzes a given text and generates a set of flashcards (Q&A pairs) using the Gemini API.
+ * 
+ * @param text The knowledge base content to analyze.
+ * @returns A promise that resolves with an array of flashcard objects (without IDs).
+ */
+export const generateFlashcardsFromText = async (text: string): Promise<Omit<Flashcard, 'id'>[]> => {
+    const prompt = `
+        SYSTEM INSTRUCTION: You are an assistant that creates helpful learning flashcards. Analyze the following text from a knowledge base. Generate 5 to 7 concise question-and-answer pairs that would be useful for a user trying to learn this material. The questions should be things a user might ask, and the answers should be direct and informative. Focus on the most important concepts, rules, or processes in the text. Format the output as a JSON array of objects, where each object has "question" and "answer" properties.
+
+        KNOWLEDGE BASE TEXT:
+        ${text}
+    `;
+
+    const responseSchema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                question: {
+                    type: Type.STRING,
+                    description: "The question for the flashcard."
+                },
+                answer: {
+                    type: Type.STRING,
+                    description: "The answer to the question."
+                }
+            },
+            required: ["question", "answer"]
+        }
+    };
+
+    // This function must use the direct Gemini API because it relies on specific features like responseSchema.
+    if (!geminiApiKey) {
+        throw new Error('Direct Gemini is required for flashcard generation, but VITE_API_KEY is missing in the .env.local file.');
+    }
+    
+    try {
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const genAIResponse = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const jsonString = genAIResponse.text;
+        const flashcards = JSON.parse(jsonString);
+
+        if (!Array.isArray(flashcards)) {
+            throw new Error('AI response was not a valid JSON array.');
+        }
+
+        return flashcards as Omit<Flashcard, 'id'>[];
+
+    } catch (error) {
+        console.error("Error generating flashcards:", error);
+        throw new Error("Failed to generate flashcards from the provided text.");
     }
 };
