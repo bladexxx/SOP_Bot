@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard } from './types';
 import { CardRenderer } from './components/CardRenderer';
-import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon } from './components/Icons';
+import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
 import { DemoGuideModal } from './components/DemoGuideModal';
 import { generateContentFromPrompt, generateFlashcardsFromText } from './services/aiService';
@@ -194,6 +194,47 @@ const mockFlashcards: Flashcard[] = [
     }
 ];
 
+interface AboutModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  version: string;
+  name: string;
+  description: string;
+}
+
+const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, version, name, description }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4" 
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="about-title"
+    >
+      <div 
+        className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-auto flex flex-col relative border border-gray-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex justify-between items-center p-4 border-b border-gray-700">
+          <h2 id="about-title" className="text-lg font-bold text-white">About {name}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors" aria-label="Close about dialog">
+            <XCircleIcon className="h-7 w-7" />
+          </button>
+        </header>
+
+        <main className="p-6 text-gray-300 space-y-4">
+            <p className="text-center text-sm">Version <span className="font-mono bg-gray-700 px-2 py-1 rounded">{version}</span></p>
+            <p>{description}</p>
+            <p className="text-xs text-gray-500 text-center pt-4">© {new Date().getFullYear()} FlowX. All rights reserved.</p>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+const APP_VERSION = '1.2';
 
 const App: React.FC = () => {
     const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -205,6 +246,8 @@ const App: React.FC = () => {
     const [showSearchResults, setShowSearchResults] = useState(false);
     const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
     const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+    const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+    const [appMetadata, setAppMetadata] = useState<{name: string, description: string} | null>(null);
     const [knowledgeBase, setKnowledgeBase] = useState<string>('');
     const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
     const [panelWidth, setPanelWidth] = useState(448); // 28rem = 448px
@@ -220,6 +263,19 @@ const App: React.FC = () => {
     // Using a ref for handleCardAction to prevent stale closures in triggerSopStep
     // FIX: Initialize useRef with null and update the type to allow null to fix the TypeScript error.
     const handleCardActionRef = useRef<((action: ActionType, payload?: any) => Promise<void>) | null>(null);
+
+    // Fetch app metadata from JSON file on component mount
+    useEffect(() => {
+        fetch('./metadata.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => setAppMetadata(data))
+            .catch(error => console.error("Could not load app metadata:", error));
+    }, []);
 
 
     const scrollToBottom = () => {
@@ -1126,8 +1182,17 @@ const App: React.FC = () => {
                     isOpen={isDemoModalOpen}
                     onClose={() => setIsDemoModalOpen(false)}
                 />
+                {appMetadata && (
+                    <AboutModal
+                        isOpen={isAboutModalOpen}
+                        onClose={() => setIsAboutModalOpen(false)}
+                        version={APP_VERSION}
+                        name={appMetadata.name}
+                        description={appMetadata.description}
+                    />
+                )}
                 <header className="bg-gray-800 p-3 shadow-md z-20 flex justify-between items-center shrink-0">
-                    <h1 className="text-lg font-semibold">FlowX SOP Bot</h1>
+                    <h1 className="text-lg font-semibold">{appMetadata?.name || 'FlowX SOP Bot'} <span className="text-xs font-mono text-gray-500 ml-1">v{APP_VERSION}</span></h1>
                     <button 
                         onClick={() => setIsPanelOpen(false)}
                         className="text-gray-400 hover:text-white transition-colors"
@@ -1150,7 +1215,7 @@ const App: React.FC = () => {
                             onFocus={() => searchQuery && setShowSearchResults(true)}
                             className="w-full bg-gray-700 text-white placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-20 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-1">
                             <button
                                 onClick={() => setIsDemoModalOpen(true)}
                                 className="p-1 text-gray-400 hover:text-white transition-colors"
@@ -1166,6 +1231,14 @@ const App: React.FC = () => {
                                 title="Show tips and commands"
                             >
                                 <SparklesIcon />
+                            </button>
+                             <button
+                                onClick={() => setIsAboutModalOpen(true)}
+                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                aria-label="Show about information"
+                                title="Show about information"
+                            >
+                                <InformationCircleIcon className="h-6 w-6" />
                             </button>
                         </div>
 
