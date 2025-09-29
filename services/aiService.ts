@@ -1,6 +1,16 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { Flashcard } from '../types';
 
+// Define `process` for client-side type checking, as Vite's `define` makes it available at runtime.
+declare var process: {
+  env: {
+    AI_PROVIDER: string;
+    API_KEY: string;
+    AI_GATEWAY_URL: string;
+    AI_GATEWAY_API_KEY: string;
+  }
+};
+
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // Read configuration from environment variables, defaulting to 'GEMINI' provider.
@@ -63,7 +73,7 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
             contents: prompt,
         });
 
-        return genAIResponse.text;
+        return genAIResponse.text ?? '';
     }
 };
 
@@ -115,7 +125,7 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
             },
         });
 
-        const jsonString = genAIResponse.text;
+        const jsonString = genAIResponse.text ?? '[]';
         const flashcards = JSON.parse(jsonString);
 
         if (!Array.isArray(flashcards)) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard } from './types';
 import { CardRenderer } from './components/CardRenderer';
-import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon } from './components/Icons';
+import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
 import { DemoGuideModal } from './components/DemoGuideModal';
 import { generateContentFromPrompt, generateFlashcardsFromText } from './services/aiService';
@@ -196,6 +196,7 @@ const mockFlashcards: Flashcard[] = [
 
 
 const App: React.FC = () => {
+    const [isPanelOpen, setIsPanelOpen] = useState(true);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -829,6 +830,17 @@ const App: React.FC = () => {
                 if (payload.path) { // A path means we are running the test
                     addMessage({ actor: Actor.USER, content: `Start batch test from: ${payload.path}` });
                     addMessage({ actor: Actor.BOT, content: `Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
+                    
+                    // Simulate communication with NiFi UI to highlight the processor
+                    if (window.parent !== window) {
+                        console.log(`[BOT->NIFI] Posting message to highlight flow for: ${payload.config.projectName}`);
+                        window.parent.postMessage({
+                            action: 'highlight-flow',
+                            configName: payload.config.projectName,
+                            vendorId: payload.config.vendorId,
+                        }, '*'); // In production, use a specific target origin
+                    }
+                    
                     try {
                         const result = await triggerNiFiFlow({
                             path: payload.path,
@@ -871,6 +883,16 @@ const App: React.FC = () => {
                 updateCardInMessage(payload.messageId, { status: 'submitted' });
                 addMessage({ actor: Actor.BOT, content: `File uploaded. Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
                 
+                 // Simulate communication with NiFi UI to highlight the processor
+                if (window.parent !== window) {
+                    console.log(`[BOT->NIFI] Posting message to highlight flow for: ${payload.config.projectName}`);
+                    window.parent.postMessage({
+                        action: 'highlight-flow',
+                        configName: payload.config.projectName,
+                        vendorId: payload.config.vendorId,
+                    }, '*'); // In production, use a specific target origin
+                }
+
                 try {
                     const result = await triggerNiFiFlow({
                         file: payload.file,
@@ -1039,56 +1061,75 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="bg-gray-900 text-white h-screen flex flex-col font-sans">
-            <FlashcardModal 
-                isOpen={isFlashcardModalOpen} 
-                onClose={() => setIsFlashcardModalOpen(false)}
-                cards={[...mockFlashcards, ...generatedFlashcards]}
-            />
-            <DemoGuideModal 
-                isOpen={isDemoModalOpen}
-                onClose={() => setIsDemoModalOpen(false)}
-            />
-            <header className="bg-gray-800 p-4 shadow-md z-20 flex justify-between items-center">
-                <h1 className="text-xl font-bold">FlowX SOP Bot</h1>
-                <div className="flex items-center space-x-4">
-                     <button 
-                        onClick={() => setIsDemoModalOpen(true)}
-                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
-                        aria-label="Show demo guide"
-                    >
-                        <PlayCircleIcon />
-                        <span className="text-sm font-medium hidden md:block">Demo</span>
-                    </button>
+        <>
+            <button
+                onClick={() => setIsPanelOpen(true)}
+                className={`fixed top-4 right-5 z-50 p-3 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-900 transition-all duration-300 ${isPanelOpen ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
+                aria-label="Open FlowX SOP Bot"
+            >
+                <BotIcon />
+            </button>
+
+            <div className={`fixed top-0 right-0 h-screen w-full max-w-md bg-gray-900 text-white flex flex-col font-sans shadow-2xl border-l border-gray-700 transition-transform duration-300 ease-in-out ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                <FlashcardModal 
+                    isOpen={isFlashcardModalOpen} 
+                    onClose={() => setIsFlashcardModalOpen(false)}
+                    cards={[...mockFlashcards, ...generatedFlashcards]}
+                />
+                <DemoGuideModal 
+                    isOpen={isDemoModalOpen}
+                    onClose={() => setIsDemoModalOpen(false)}
+                />
+                <header className="bg-gray-800 p-3 shadow-md z-20 flex justify-between items-center shrink-0">
+                    <h1 className="text-lg font-semibold">FlowX SOP Bot</h1>
                     <button 
-                        onClick={() => setIsFlashcardModalOpen(true)}
-                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
-                        aria-label="Show tips and commands"
+                        onClick={() => setIsPanelOpen(false)}
+                        className="text-gray-400 hover:text-white transition-colors"
+                        aria-label="Close panel"
                     >
-                        <SparklesIcon />
-                        <span className="text-sm font-medium hidden md:block">Tips</span>
+                        <XIcon />
                     </button>
-                    <div className="relative w-64 md:w-80" ref={searchRef}>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-                                <SearchIcon />
-                            </span>
-                            <input 
-                                type="text"
-                                placeholder="Search configurations..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onFocus={() => searchQuery && setShowSearchResults(true)}
-                                className="w-full bg-gray-700 text-white placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
+                </header>
+                
+                <div className="bg-gray-800/50 p-3 border-b border-t border-gray-700 shrink-0">
+                    <div className="relative" ref={searchRef}>
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                            <SearchIcon />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Search configs..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onFocus={() => searchQuery && setShowSearchResults(true)}
+                            className="w-full bg-gray-700 text-white placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-20 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                            <button
+                                onClick={() => setIsDemoModalOpen(true)}
+                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                aria-label="Show demo guide"
+                                title="Show demo guide"
+                            >
+                                <PlayCircleIcon />
+                            </button>
+                            <button
+                                onClick={() => setIsFlashcardModalOpen(true)}
+                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                aria-label="Show tips and commands"
+                                title="Show tips and commands"
+                            >
+                                <SparklesIcon />
+                            </button>
                         </div>
+
                         {showSearchResults && (
-                            <div className="absolute mt-2 w-full bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            <div className="absolute mt-2 w-full bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto z-30">
                                 <ul>
                                     {searchResults.length > 0 ? (
                                         searchResults.map(config => (
-                                            <li 
-                                                key={`${config.projectName}-${config.vendorId || 'project'}`} 
+                                            <li
+                                                key={`${config.projectName}-${config.vendorId || 'project'}`}
                                                 className="px-4 py-2 hover:bg-indigo-600 cursor-pointer"
                                                 onClick={() => handleSearchResultClick(config)}
                                             >
@@ -1104,93 +1145,94 @@ const App: React.FC = () => {
                         )}
                     </div>
                 </div>
-            </header>
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-                <div className="max-w-3xl mx-auto space-y-6">
-                    {messages.map((msg) => (
-                        <div key={msg.id} className={`flex items-start gap-4 ${msg.actor === Actor.USER ? 'justify-end' : ''}`}>
-                            {msg.actor === Actor.BOT && <BotIcon />}
-                            <div className={`flex flex-col ${msg.actor === Actor.USER ? 'items-end' : 'items-start'}`}>
-                                <div className={`flex items-center space-x-2 ${msg.actor === Actor.USER ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                                    {msg.isGemini && <GeminiIcon className="h-4 w-4 text-purple-400" />}
-                                    <span className="font-bold text-sm">{msg.actor === Actor.BOT ? (msg.isGemini ? 'FlowX SOP Bot (AI)' : 'FlowX SOP Bot') : 'You'}</span>
-                                    <span className="text-xs text-gray-500">{msg.timestamp}</span>
+
+                <main className="flex-1 overflow-y-auto p-4">
+                    <div className="space-y-6">
+                        {messages.map((msg) => (
+                            <div key={msg.id} className={`flex items-start gap-4 ${msg.actor === Actor.USER ? 'justify-end' : ''}`}>
+                                {msg.actor === Actor.BOT && <BotIcon />}
+                                <div className={`flex flex-col ${msg.actor === Actor.USER ? 'items-end' : 'items-start'}`}>
+                                    <div className={`flex items-center space-x-2 ${msg.actor === Actor.USER ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                                        {msg.isGemini && <GeminiIcon className="h-4 w-4 text-purple-400" />}
+                                        <span className="font-bold text-sm">{msg.actor === Actor.BOT ? (msg.isGemini ? 'FlowX SOP Bot (AI)' : 'FlowX SOP Bot') : 'You'}</span>
+                                        <span className="text-xs text-gray-500">{msg.timestamp}</span>
+                                    </div>
+                                    <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
+                                        {msg.content && <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.isGemini ? 'bg-purple-900/50 border border-purple-700' : (msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600')}`}>{msg.content}</div>}
+                                        {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={configs} allTemplates={templates} allBenchmarks={benchmarks} />}
+                                    </div>
                                 </div>
-                                <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
-                                    {msg.content && <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.isGemini ? 'bg-purple-900/50 border border-purple-700' : (msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600')}`}>{msg.content}</div>}
-                                    {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={configs} allTemplates={templates} allBenchmarks={benchmarks} />}
+                                {msg.actor === Actor.USER && <UserIcon />}
+                            </div>
+                        ))}
+                        {isLoading && (
+                            <div className="flex items-start gap-4">
+                                <BotIcon />
+                                <div className="flex flex-col items-start">
+                                    <div className="flex items-center space-x-2">
+                                        <span className="font-bold text-sm">FlowX SOP Bot</span>
+                                    </div>
+                                    <div className="mt-2 flex items-center space-x-2 px-4 py-2 bg-gray-700 rounded-lg">
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-75"></div>
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
+                                    </div>
                                 </div>
                             </div>
-                             {msg.actor === Actor.USER && <UserIcon />}
-                        </div>
-                    ))}
-                    {isLoading && (
-                        <div className="flex items-start gap-4">
-                            <BotIcon />
-                            <div className="flex flex-col items-start">
-                                <div className="flex items-center space-x-2">
-                                    <span className="font-bold text-sm">FlowX SOP Bot</span>
-                                </div>
-                                <div className="mt-2 flex items-center space-x-2 px-4 py-2 bg-gray-700 rounded-lg">
-                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-75"></div>
-                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-            </main>
-            <footer className="bg-gray-800 p-4 border-t border-gray-700 z-10">
-                <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center bg-gray-700 rounded-lg p-2">
-                        <input
-                            type="file"
-                            ref={knowledgeFileInputRef}
-                            onChange={handleKnowledgeFileChange}
-                            className="hidden"
-                            accept=".md,text/markdown"
-                        />
-                        <button 
-                            className="p-2 text-gray-400 hover:text-white transition-colors"
-                            onClick={() => knowledgeFileInputRef.current?.click()}
-                            title="Upload Knowledge Document (.md)"
-                            aria-label="Upload Knowledge Document"
-                        >
-                            <PaperclipIcon />
-                        </button>
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
-                            placeholder="Type a message to the bot, or ask the AI..."
-                            className="flex-1 bg-transparent px-2 text-white placeholder-gray-500 focus:outline-none"
-                            disabled={isLoading}
-                        />
-                         <button
-                            onClick={handleAskGemini}
-                            disabled={isLoading || input.trim() === ''}
-                            className="p-2 text-purple-400 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed hover:text-purple-300 transition-colors"
-                            aria-label="Ask Gemini AI"
-                            title="Ask Gemini AI"
-                        >
-                            <SparklesIcon />
-                        </button>
-                        <button 
-                            onClick={handleSendMessage} 
-                            disabled={isLoading || input.trim() === ''}
-                            className="p-2 ml-2 bg-indigo-600 rounded-md text-white disabled:bg-gray-600 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
-                            aria-label="Send to bot"
-                            title="Send to bot"
-                        >
-                            {isLoading ? <LoadingSpinner /> : <SendIcon />}
-                        </button>
+                        )}
+                        <div ref={messagesEndRef} />
                     </div>
-                </div>
-            </footer>
-        </div>
+                </main>
+                <footer className="bg-gray-800 p-4 border-t border-gray-700 z-10 shrink-0">
+                    <div className="w-full">
+                        <div className="flex items-center bg-gray-700 rounded-lg p-2">
+                            <input
+                                type="file"
+                                ref={knowledgeFileInputRef}
+                                onChange={handleKnowledgeFileChange}
+                                className="hidden"
+                                accept=".md,text/markdown"
+                            />
+                            <button 
+                                className="p-2 text-gray-400 hover:text-white transition-colors"
+                                onClick={() => knowledgeFileInputRef.current?.click()}
+                                title="Upload Knowledge Document (.md)"
+                                aria-label="Upload Knowledge Document"
+                            >
+                                <PaperclipIcon />
+                            </button>
+                            <input
+                                type="text"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
+                                placeholder="Type a message to the bot, or ask the AI..."
+                                className="flex-1 bg-transparent px-2 text-white placeholder-gray-500 focus:outline-none"
+                                disabled={isLoading}
+                            />
+                            <button
+                                onClick={handleAskGemini}
+                                disabled={isLoading || input.trim() === ''}
+                                className="p-2 text-purple-400 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed hover:text-purple-300 transition-colors"
+                                aria-label="Ask Gemini AI"
+                                title="Ask Gemini AI"
+                            >
+                                <SparklesIcon />
+                            </button>
+                            <button 
+                                onClick={handleSendMessage} 
+                                disabled={isLoading || input.trim() === ''}
+                                className="p-2 ml-2 bg-indigo-600 rounded-md text-white disabled:bg-gray-600 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
+                                aria-label="Send to bot"
+                                title="Send to bot"
+                            >
+                                {isLoading ? <LoadingSpinner /> : <SendIcon />}
+                            </button>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </>
     );
 };
 

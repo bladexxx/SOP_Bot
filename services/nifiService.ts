@@ -21,7 +21,7 @@ interface NiFiFlowResult {
  * @returns A promise that resolves with the test results or rejects with an error.
  */
 export const triggerNiFiFlow = (params: NiFiFlowParams): Promise<NiFiFlowResult> => {
-    console.log('[MOCK NIFI API] Triggering NiFi flow with parameters:', {
+    console.log('[MOCK NIFI INTEGRATION] Calling internal NiFi endpoint `/nifi-api/flowx-bot/trigger-test` with parameters:', {
         path: params.path || params.file?.name,
         benchmarkId: params.benchmarkId,
         configId: `${params.config.projectName}-${params.config.vendorId || 'project'}`

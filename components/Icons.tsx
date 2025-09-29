@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 export const BotIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -49,6 +49,13 @@ export const XCircleIcon = ({ className = "h-5 w-5 text-red-400" }: { className?
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
     </svg>
 );
+
+export const XIcon = ({ className = "h-6 w-6" }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+);
+
 
 export const SearchIcon = () => (
      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -136,7 +143,7 @@ export const ThumbsUpIcon = () => (
 
 export const ThumbsDownIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10 14h4.764a2 2 0 001.789-2.894l-3.5-7A2 2 0 0011.263 3h-4.017c-.163 0-.326.02-.485.06L3 5.266v12.468L5.515 20.5A2 2 0 007.515 21h1.485a2 2 0 001.966-1.638L10 14zM17 18V6" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10 14h4.764a2 2 0 001.789-2.894l-3.5-7A2 2 0 0011.263 3h-4.017c-.163 0-.326-.02-.485-.06L3 5.266v12.468L5.515 20.5A2 2 0 007.515 21h1.485a2 2 0 001.966-1.638L10 14zM17 18V6" />
     </svg>
 );
 

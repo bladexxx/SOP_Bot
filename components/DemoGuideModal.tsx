@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, CodeIcon, HierarchyIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon } from './Icons';
+import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon } from './Icons';
 
 const slides = [
     {

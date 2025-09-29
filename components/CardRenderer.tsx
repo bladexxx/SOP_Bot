@@ -1002,12 +1002,10 @@ const AlertCard: React.FC<{ payload: any }> = ({ payload }) => (
 
 const FileUploadCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [fileName, setFileName] = useState('');
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files[0]) {
             const file = event.target.files[0];
-            setFileName(file.name);
             onAction(ActionType.UPLOAD_FILE, { messageId, file, sopContext: payload.sopContext });
         }
     };
