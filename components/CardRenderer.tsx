@@ -198,7 +198,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
         <p className="text-gray-300 mt-1">How would you like to start?</p>
         <div className="mt-4 grid grid-cols-1 gap-3">
             <button
-                onClick={() => onAction(ActionType.START_FROM_TEMPLATE, { sopContext: payload.sopContext })}
+                onClick={() => onAction(ActionType.START_FROM_TEMPLATE, { sopContext: payload?.sopContext })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
                 <div className="flex items-center">
@@ -208,7 +208,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
                 <p className="text-sm text-gray-400 mt-1">Use a pre-defined schema for a specific project.</p>
             </button>
             <button
-                onClick={() => onAction(ActionType.START_CLONE, { sopContext: payload.sopContext })}
+                onClick={() => onAction(ActionType.START_CLONE, { sopContext: payload?.sopContext })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
                 <div className="flex items-center">
@@ -218,7 +218,7 @@ const ConfigCreatorChooserCard: React.FC<{ payload: any, onAction: CardRendererP
                 <p className="text-sm text-gray-400 mt-1">Copy and modify an existing configuration.</p>
             </button>
             <button
-                onClick={() => onAction(ActionType.SHOW_JSON_IMPORTER, { sopContext: payload.sopContext })}
+                onClick={() => onAction(ActionType.SHOW_JSON_IMPORTER, { sopContext: payload?.sopContext })}
                 className="w-full p-3 bg-gray-700/50 hover:bg-indigo-900/50 border border-gray-600 hover:border-indigo-500 rounded-lg text-left transition-all"
             >
                 <div className="flex items-center">
