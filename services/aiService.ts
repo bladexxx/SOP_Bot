@@ -73,7 +73,8 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
             contents: prompt,
         });
 
-        return genAIResponse.text ?? '';
+        // FIX: The `text` accessor on GenerateContentResponse is a property, not a method.
+        return genAIResponse.text;
     }
 };
 
@@ -125,7 +126,8 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
             },
         });
 
-        const jsonString = genAIResponse.text ?? '[]';
+        // FIX: The `text` accessor on GenerateContentResponse is a property, not a method.
+        const jsonString = genAIResponse.text || '[]';
         const flashcards = JSON.parse(jsonString);
 
         if (!Array.isArray(flashcards)) {

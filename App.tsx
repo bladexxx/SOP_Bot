@@ -207,6 +207,7 @@ const App: React.FC = () => {
     const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
     const [knowledgeBase, setKnowledgeBase] = useState<string>('');
     const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
+    const [panelWidth, setPanelWidth] = useState(448); // 28rem = 448px
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLDivElement>(null);
     const knowledgeFileInputRef = useRef<HTMLInputElement>(null);
@@ -217,7 +218,8 @@ const App: React.FC = () => {
     const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
     
     // Using a ref for handleCardAction to prevent stale closures in triggerSopStep
-    const handleCardActionRef = useRef<(action: ActionType, payload?: any) => Promise<void>>();
+    // FIX: Initialize useRef with null and update the type to allow null to fix the TypeScript error.
+    const handleCardActionRef = useRef<((action: ActionType, payload?: any) => Promise<void>) | null>(null);
 
 
     const scrollToBottom = () => {
@@ -392,7 +394,6 @@ const App: React.FC = () => {
                 addMessage({ actor: Actor.BOT, content: "Which project's benchmark datasets would you like to see? For example, 'show benchmarks for Auto-billing'." });
             }
         } else if (lowerInput.includes('test')) {
-             addMessage({ actor: Actor.USER, content: "Run Test" });
              addMessage({ actor: Actor.BOT, content: "Sure, which configuration do you want to run a test for?" });
              addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_SELECTOR, payload: { source: 'quickAction' } } });
         } else if (lowerInput.includes('config') || lowerInput.includes('add') || lowerInput.includes('new')) {
@@ -1043,6 +1044,38 @@ const App: React.FC = () => {
         setIsLoading(false);
     }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, updateFlashcardsFromKnowledgeBase, knowledgeBase]);
     
+    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        
+        const startWidth = panelWidth;
+        const startX = e.clientX;
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const currentX = moveEvent.clientX;
+            const dx = currentX - startX;
+            const newWidth = startWidth - dx;
+
+            const minWidth = 384; // 24rem
+            const maxWidth = 896; // 56rem
+            
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                setPanelWidth(newWidth);
+            }
+        };
+
+        const handleMouseUp = () => {
+            document.body.style.cursor = 'default';
+            document.body.style.userSelect = 'auto';
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }, [panelWidth]);
+    
     useEffect(() => {
         handleCardActionRef.current = handleCardAction;
     }, [handleCardAction]);
@@ -1070,7 +1103,20 @@ const App: React.FC = () => {
                 <BotIcon />
             </button>
 
-            <div className={`fixed top-0 right-0 h-screen w-full max-w-md bg-gray-900 text-white flex flex-col font-sans shadow-2xl border-l border-gray-700 transition-transform duration-300 ease-in-out ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div 
+                className={`fixed top-0 right-0 h-screen bg-gray-900 text-white flex flex-col font-sans shadow-2xl border-l border-gray-700 transition-transform duration-300 ease-in-out ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                style={{ width: `${panelWidth}px` }}
+            >
+                <div
+                    className="absolute top-0 -left-1 w-2 h-full cursor-col-resize group z-30"
+                    onMouseDown={handleMouseDown}
+                    aria-label="Resize panel"
+                    role="separator"
+                    aria-orientation="vertical"
+                >
+                    <div className="w-0.5 h-full bg-transparent group-hover:bg-indigo-500 transition-colors duration-200 mx-auto"></div>
+                </div>
+                
                 <FlashcardModal 
                     isOpen={isFlashcardModalOpen} 
                     onClose={() => setIsFlashcardModalOpen(false)}

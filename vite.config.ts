@@ -9,7 +9,8 @@ export default defineConfig({
   define: {
     'process.env.API_KEY': `"${process.env.VITE_API_KEY}"`,
     'process.env.AI_PROVIDER': `"${process.env.VITE_AI_PROVIDER}"`,
-    'process.env.AI_GATEWAY_URL': `"${process.env.VITE_AI_GATEWiAY_URL}"`,
+    // FIX: Corrected typo in environment variable name.
+    'process.env.AI_GATEWAY_URL': `"${process.env.VITE_AI_GATEWAY_URL}"`,
     'process.env.AI_GATEWAY_API_KEY': `"${process.env.VITE_AI_GATEWAY_API_KEY}"`
   }
 })
