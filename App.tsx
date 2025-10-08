@@ -214,27 +214,27 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, version, name,
       aria-labelledby="about-title"
     >
       <div 
-        className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-auto flex flex-col relative border border-gray-700"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-auto flex flex-col relative border border-gray-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 id="about-title" className="text-lg font-bold text-white">About {name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors" aria-label="Close about dialog">
+        <header className="flex justify-between items-center p-4 border-b border-gray-200">
+          <h2 id="about-title" className="text-lg font-bold text-gray-900">About {name}</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 transition-colors" aria-label="Close about dialog">
             <XCircleIcon className="h-7 w-7" />
           </button>
         </header>
 
-        <main className="p-6 text-gray-300 space-y-4">
-            <p className="text-center text-sm">Version <span className="font-mono bg-gray-700 px-2 py-1 rounded">{version}</span></p>
+        <main className="p-6 text-gray-700 space-y-4">
+            <p className="text-center text-sm">Version <span className="font-mono bg-gray-100 text-gray-800 px-2 py-1 rounded">{version}</span></p>
             <p>{description}</p>
-            <p className="text-xs text-gray-500 text-center pt-4">© {new Date().getFullYear()} FlowX. All rights reserved.</p>
+            <p className="text-xs text-gray-400 text-center pt-4">© {new Date().getFullYear()} FlowX. All rights reserved.</p>
         </main>
       </div>
     </div>
   );
 };
 
-const APP_VERSION = '1.2';
+const APP_VERSION = '1.3';
 
 const App: React.FC = () => {
     const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -1153,14 +1153,14 @@ const App: React.FC = () => {
         <>
             <button
                 onClick={() => setIsPanelOpen(true)}
-                className={`fixed top-4 right-5 z-50 p-3 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-900 transition-all duration-300 ${isPanelOpen ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
+                className={`fixed top-4 right-5 z-50 p-3 bg-teal-900 text-white rounded-full shadow-lg hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-600 focus:ring-offset-gray-100 transition-all duration-300 ${isPanelOpen ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
                 aria-label="Open FlowX SOP Bot"
             >
                 <BotIcon />
             </button>
 
             <div 
-                className={`fixed top-0 right-0 h-screen bg-gray-900 text-white flex flex-col font-sans shadow-2xl border-l border-gray-700 transition-transform duration-300 ease-in-out ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                className={`fixed top-0 right-0 h-screen bg-white text-gray-800 flex flex-col font-sans shadow-2xl border-l border-gray-200 transition-transform duration-300 ease-in-out ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}
                 style={{ width: `${panelWidth}px` }}
             >
                 <div
@@ -1170,7 +1170,7 @@ const App: React.FC = () => {
                     role="separator"
                     aria-orientation="vertical"
                 >
-                    <div className="w-0.5 h-full bg-transparent group-hover:bg-indigo-500 transition-colors duration-200 mx-auto"></div>
+                    <div className="w-0.5 h-full bg-transparent group-hover:bg-teal-600 transition-colors duration-200 mx-auto"></div>
                 </div>
                 
                 <FlashcardModal 
@@ -1191,18 +1191,18 @@ const App: React.FC = () => {
                         description={appMetadata.description}
                     />
                 )}
-                <header className="bg-gray-800 p-3 shadow-md z-20 flex justify-between items-center shrink-0">
-                    <h1 className="text-lg font-semibold">{appMetadata?.name || 'FlowX SOP Bot'} <span className="text-xs font-mono text-gray-500 ml-1">v{APP_VERSION}</span></h1>
+                <header className="bg-gray-50 p-3 shadow-sm z-20 flex justify-between items-center shrink-0 border-b border-gray-200">
+                    <h1 className="text-lg font-semibold text-gray-800">{appMetadata?.name || 'FlowX SOP Bot'} <span className="text-xs font-mono text-gray-400 ml-1">v{APP_VERSION}</span></h1>
                     <button 
                         onClick={() => setIsPanelOpen(false)}
-                        className="text-gray-400 hover:text-white transition-colors"
+                        className="text-gray-500 hover:text-gray-800 transition-colors"
                         aria-label="Close panel"
                     >
                         <XIcon />
                     </button>
                 </header>
                 
-                <div className="bg-gray-800/50 p-3 border-b border-t border-gray-700 shrink-0">
+                <div className="p-3 border-b border-t border-gray-200 shrink-0">
                     <div className="relative" ref={searchRef}>
                         <span className="absolute inset-y-0 left-0 flex items-center pl-3">
                             <SearchIcon />
@@ -1213,12 +1213,12 @@ const App: React.FC = () => {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onFocus={() => searchQuery && setShowSearchResults(true)}
-                            className="w-full bg-gray-700 text-white placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-20 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full bg-gray-100 text-gray-800 placeholder-gray-500 border border-gray-300 rounded-md py-2 pl-10 pr-20 focus:outline-none focus:ring-2 focus:ring-teal-600"
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-1">
                             <button
                                 onClick={() => setIsDemoModalOpen(true)}
-                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                className="p-1 text-gray-500 hover:text-gray-800 transition-colors"
                                 aria-label="Show demo guide"
                                 title="Show demo guide"
                             >
@@ -1226,7 +1226,7 @@ const App: React.FC = () => {
                             </button>
                             <button
                                 onClick={() => setIsFlashcardModalOpen(true)}
-                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                className="p-1 text-gray-500 hover:text-gray-800 transition-colors"
                                 aria-label="Show tips and commands"
                                 title="Show tips and commands"
                             >
@@ -1234,7 +1234,7 @@ const App: React.FC = () => {
                             </button>
                              <button
                                 onClick={() => setIsAboutModalOpen(true)}
-                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                className="p-1 text-gray-500 hover:text-gray-800 transition-colors"
                                 aria-label="Show about information"
                                 title="Show about information"
                             >
@@ -1243,21 +1243,21 @@ const App: React.FC = () => {
                         </div>
 
                         {showSearchResults && (
-                            <div className="absolute mt-2 w-full bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto z-30">
+                            <div className="absolute mt-2 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-30">
                                 <ul>
                                     {searchResults.length > 0 ? (
                                         searchResults.map(config => (
                                             <li
                                                 key={`${config.projectName}-${config.vendorId || 'project'}`}
-                                                className="px-4 py-2 hover:bg-indigo-600 cursor-pointer"
+                                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                                                 onClick={() => handleSearchResultClick(config)}
                                             >
-                                                <div className="font-semibold">{config.projectName} <span className={`text-xs font-bold ${config.level === 'Project' ? 'text-indigo-400' : 'text-teal-400'}`}>({config.level})</span></div>
-                                                <div className="text-sm text-gray-400">{config.vendorId || 'Applies to all vendors'}</div>
+                                                <div className="font-semibold">{config.projectName} <span className={`text-xs font-bold ${config.level === 'Project' ? 'text-teal-800' : 'text-green-700'}`}>({config.level})</span></div>
+                                                <div className="text-sm text-gray-500">{config.vendorId || 'Applies to all vendors'}</div>
                                             </li>
                                         ))
                                     ) : (
-                                        <li className="px-4 py-2 text-gray-400">No results found</li>
+                                        <li className="px-4 py-2 text-gray-500">No results found</li>
                                     )}
                                 </ul>
                             </div>
@@ -1265,19 +1265,19 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                <main className="flex-1 overflow-y-auto p-4">
+                <main className="flex-1 overflow-y-auto p-4 bg-gray-50">
                     <div className="space-y-6">
                         {messages.map((msg) => (
                             <div key={msg.id} className={`flex items-start gap-4 ${msg.actor === Actor.USER ? 'justify-end' : ''}`}>
                                 {msg.actor === Actor.BOT && <BotIcon />}
                                 <div className={`flex flex-col ${msg.actor === Actor.USER ? 'items-end' : 'items-start'}`}>
                                     <div className={`flex items-center space-x-2 ${msg.actor === Actor.USER ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                                        {msg.isGemini && <GeminiIcon className="h-4 w-4 text-purple-400" />}
-                                        <span className="font-bold text-sm">{msg.actor === Actor.BOT ? (msg.isGemini ? 'FlowX SOP Bot (AI)' : 'FlowX SOP Bot') : 'You'}</span>
+                                        {msg.isGemini && <GeminiIcon className="h-4 w-4 text-teal-700" />}
+                                        <span className="font-bold text-sm text-gray-800">{msg.actor === Actor.BOT ? (msg.isGemini ? 'FlowX SOP Bot (AI)' : 'FlowX SOP Bot') : 'You'}</span>
                                         <span className="text-xs text-gray-500">{msg.timestamp}</span>
                                     </div>
                                     <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
-                                        {msg.content && <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.isGemini ? 'bg-purple-900/50 border border-purple-700' : (msg.actor === Actor.BOT ? 'bg-gray-700' : 'bg-indigo-600')}`}>{msg.content}</div>}
+                                        {msg.content && <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.isGemini ? 'bg-teal-50 border border-teal-200' : (msg.actor === Actor.BOT ? 'bg-gray-200' : 'bg-teal-900 text-white')}`}>{msg.content}</div>}
                                         {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={configs} allTemplates={templates} allBenchmarks={benchmarks} />}
                                     </div>
                                 </div>
@@ -1289,12 +1289,12 @@ const App: React.FC = () => {
                                 <BotIcon />
                                 <div className="flex flex-col items-start">
                                     <div className="flex items-center space-x-2">
-                                        <span className="font-bold text-sm">FlowX SOP Bot</span>
+                                        <span className="font-bold text-sm text-gray-800">FlowX SOP Bot</span>
                                     </div>
-                                    <div className="mt-2 flex items-center space-x-2 px-4 py-2 bg-gray-700 rounded-lg">
-                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-75"></div>
-                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
+                                    <div className="mt-2 flex items-center space-x-2 px-4 py-2 bg-gray-200 rounded-lg">
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse delay-75"></div>
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse delay-150"></div>
                                     </div>
                                 </div>
                             </div>
@@ -1302,9 +1302,9 @@ const App: React.FC = () => {
                         <div ref={messagesEndRef} />
                     </div>
                 </main>
-                <footer className="bg-gray-800 p-4 border-t border-gray-700 z-10 shrink-0">
+                <footer className="bg-gray-100 p-4 border-t border-gray-200 z-10 shrink-0">
                     <div className="w-full">
-                        <div className="flex items-center bg-gray-700 rounded-lg p-2">
+                        <div className="flex items-center bg-white border border-gray-300 rounded-lg p-1">
                             <input
                                 type="file"
                                 ref={knowledgeFileInputRef}
@@ -1313,7 +1313,7 @@ const App: React.FC = () => {
                                 accept=".md,text/markdown"
                             />
                             <button 
-                                className="p-2 text-gray-400 hover:text-white transition-colors"
+                                className="p-2 text-gray-500 hover:text-gray-800 transition-colors"
                                 onClick={() => knowledgeFileInputRef.current?.click()}
                                 title="Upload Knowledge Document (.md)"
                                 aria-label="Upload Knowledge Document"
@@ -1326,13 +1326,13 @@ const App: React.FC = () => {
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
                                 placeholder="Type a message to the bot, or ask the AI..."
-                                className="flex-1 bg-transparent px-2 text-white placeholder-gray-500 focus:outline-none"
+                                className="flex-1 bg-transparent px-2 text-gray-800 placeholder-gray-500 focus:outline-none"
                                 disabled={isLoading}
                             />
                             <button
                                 onClick={handleAskGemini}
                                 disabled={isLoading || input.trim() === ''}
-                                className="p-2 text-purple-400 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed hover:text-purple-300 transition-colors"
+                                className="p-2 text-teal-800 rounded-md disabled:text-gray-400 disabled:cursor-not-allowed hover:text-teal-700 transition-colors"
                                 aria-label="Ask Gemini AI"
                                 title="Ask Gemini AI"
                             >
@@ -1341,7 +1341,7 @@ const App: React.FC = () => {
                             <button 
                                 onClick={handleSendMessage} 
                                 disabled={isLoading || input.trim() === ''}
-                                className="p-2 ml-2 bg-indigo-600 rounded-md text-white disabled:bg-gray-600 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
+                                className="p-2 ml-2 bg-teal-900 rounded-md text-white disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-teal-800 transition-colors"
                                 aria-label="Send to bot"
                                 title="Send to bot"
                             >

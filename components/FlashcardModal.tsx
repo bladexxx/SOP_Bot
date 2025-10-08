@@ -43,12 +43,12 @@ export const FlashcardModal: React.FC<FlashcardModalProps> = ({ isOpen, onClose,
       aria-labelledby="flashcard-title"
     >
       <div 
-        className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-auto flex flex-col relative border border-gray-700"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto flex flex-col relative border border-gray-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 id="flashcard-title" className="text-lg font-bold text-white">Flashcards: Bot Commands & Tips</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors" aria-label="Close flashcards">
+        <header className="flex justify-between items-center p-4 border-b border-gray-200">
+          <h2 id="flashcard-title" className="text-lg font-bold text-gray-900">Flashcards: Bot Commands & Tips</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 transition-colors" aria-label="Close flashcards">
             <XCircleIcon className="h-7 w-7" />
           </button>
         </header>
@@ -64,31 +64,31 @@ export const FlashcardModal: React.FC<FlashcardModalProps> = ({ isOpen, onClose,
           >
             <div className={`relative w-full h-full transform-style-3d transition-transform duration-500 ${isFlipped ? 'rotate-y-180' : ''}`}>
               {/* Front of Card */}
-              <div className="absolute w-full h-full backface-hidden bg-indigo-900/50 border border-indigo-500 rounded-lg flex flex-col justify-center items-center p-6 text-center">
-                <p className="text-sm font-semibold text-indigo-300">Question</p>
-                <p className="mt-4 text-xl font-medium text-white">{currentCard.question}</p>
+              <div className="absolute w-full h-full backface-hidden bg-teal-50 border border-teal-200 rounded-lg flex flex-col justify-center items-center p-6 text-center">
+                <p className="text-sm font-semibold text-teal-800">Question</p>
+                <p className="mt-4 text-xl font-medium text-gray-800">{currentCard.question}</p>
               </div>
               {/* Back of Card */}
-              <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-gray-700 border border-gray-600 rounded-lg flex flex-col justify-center items-center p-6 text-center">
-                 <p className="text-sm font-semibold text-gray-300">Answer</p>
-                 <p className="mt-4 text-lg text-white">{currentCard.answer}</p>
+              <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-gray-100 border border-gray-200 rounded-lg flex flex-col justify-center items-center p-6 text-center">
+                 <p className="text-sm font-semibold text-gray-500">Answer</p>
+                 <p className="mt-4 text-lg text-gray-800">{currentCard.answer}</p>
               </div>
             </div>
           </div>
         </main>
         
-        <footer className="p-4 border-t border-gray-700">
+        <footer className="p-4 border-t border-gray-200">
           <div className="flex justify-center mb-3">
-             <button onClick={() => setIsFlipped(!isFlipped)} className="px-6 py-2 text-sm font-semibold text-white bg-gray-600 hover:bg-gray-500 rounded-md transition-colors duration-200">
+             <button onClick={() => setIsFlipped(!isFlipped)} className="px-6 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors duration-200">
                 {isFlipped ? 'Show Question' : 'Flip to Answer'}
             </button>
           </div>
           <div className="flex justify-between items-center">
-            <button onClick={handlePrev} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors duration-200">
+            <button onClick={handlePrev} className="px-4 py-2 text-sm font-semibold text-white bg-teal-900 hover:bg-teal-800 rounded-md transition-colors duration-200">
               Previous
             </button>
-            <p className="text-sm text-gray-400 font-medium">Card {currentIndex + 1} of {cards.length}</p>
-            <button onClick={handleNext} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors duration-200">
+            <p className="text-sm text-gray-500 font-medium">Card {currentIndex + 1} of {cards.length}</p>
+            <button onClick={handleNext} className="px-4 py-2 text-sm font-semibold text-white bg-teal-900 hover:bg-teal-800 rounded-md transition-colors duration-200">
               Next
             </button>
           </div>
