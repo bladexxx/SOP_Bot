@@ -1,9 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), basicSsl()],
+  server: {
+    https: true
+  },
   // This allows the use of 'process.env' in the client-side code,
   // making the environment variable available as defined in the .env file.
   define: {
