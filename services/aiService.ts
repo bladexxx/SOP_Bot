@@ -21,6 +21,27 @@ const gatewayUrl = process.env.AI_GATEWAY_URL;
 const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
 const gatewayModel = process.env.AI_GATEWAY_MODEL;
 
+// --- Startup Logging: Log the configuration as soon as the module is loaded ---
+console.groupCollapsed('[AI Service] Configuration Loaded');
+console.info(`AI Provider: %c${aiProvider}`, 'font-weight: bold;');
+if (aiProvider === 'GATEWAY') {
+    console.log(`Gateway URL: ${gatewayUrl || 'Not Set'}`);
+    console.log(`Gateway Model: ${gatewayModel || `(not set, will default to ${GEMINI_MODEL})`}`);
+    const maskedGatewayKey = gatewayApiKey ? `${gatewayApiKey.substring(0, 4)}...${gatewayApiKey.slice(-4)}` : 'Not Set';
+    console.log(`Gateway API Key Set: %c${!!gatewayApiKey}`, `font-weight: bold; color: ${!!gatewayApiKey ? 'green' : 'red'};`);
+} else {
+    const maskedGeminiKey = geminiApiKey ? `${geminiApiKey.substring(0, 4)}...${geminiApiKey.slice(-4)}` : 'Not Set';
+     console.log(`Gemini API Key Set: %c${!!geminiApiKey}`, `font-weight: bold; color: ${!!geminiApiKey ? 'green' : 'red'};`);
+}
+console.groupEnd();
+
+if (aiProvider === 'GATEWAY' && (!gatewayUrl || !gatewayApiKey)) {
+    console.error('[AI Service] CRITICAL: AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in your .env file.');
+} else if (aiProvider !== 'GATEWAY' && !geminiApiKey) {
+    console.error('[AI Service] CRITICAL: Direct Gemini is the configured provider, but VITE_API_KEY is missing in your .env file.');
+}
+// --- End of Startup Logging ---
+
 /**
  * Generates content using the configured AI provider (Direct Gemini or an AI Gateway).
  * This function abstracts the API call, allowing for flexible backend configurations.
@@ -32,7 +53,9 @@ const gatewayModel = process.env.AI_GATEWAY_MODEL;
 export const generateContentFromPrompt = async (prompt: string): Promise<string> => {
     if (aiProvider === 'GATEWAY') {
         if (!gatewayUrl || !gatewayApiKey) {
-            throw new Error('AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in the .env.local file.');
+            const errorMsg = 'AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in the .env file.';
+            console.error(`[AI Service] Aborting request. ${errorMsg}`);
+            throw new Error(errorMsg);
         }
         const modelToUse = gatewayModel || GEMINI_MODEL;
         console.log(`[AI Service] Using AI Gateway at: ${gatewayUrl} with model: ${modelToUse}`);
@@ -54,52 +77,74 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
         }
         messages.push({ role: 'user', content: userContent });
         
-        const response = await fetch(gatewayUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${gatewayApiKey}`
-            },
-            body: JSON.stringify({
-                model: modelToUse,
-                messages: messages,
-            })
-        });
+        const requestBody = {
+            model: modelToUse,
+            messages: messages,
+        };
 
-        if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`AI Gateway request failed with status ${response.status}: ${errorBody}`);
-        }
+        console.log('[AI Service] Sending request to Gateway with body:', JSON.stringify(requestBody, null, 2));
 
-        const data = await response.json();
-        
-        // Handle standard OpenAI/LiteLLM response format.
-        if (data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') {
-            return data.choices[0].message.content;
-        }
+        try {
+            const response = await fetch(gatewayUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${gatewayApiKey}`
+                },
+                body: JSON.stringify(requestBody)
+            });
 
-        // Fallback for non-standard or older gateway implementations.
-        if (typeof data.text === 'string') {
-             return data.text;
+            const responseText = await response.text();
+            console.log(`[AI Service] Gateway response status: ${response.status}`);
+            console.log('[AI Service] Raw gateway response body:', responseText);
+
+            if (!response.ok) {
+                throw new Error(`AI Gateway request failed with status ${response.status}: ${responseText}`);
+            }
+
+            const data = JSON.parse(responseText);
+            console.log('[AI Service] Parsed gateway response data:', data);
+            
+            // Handle standard OpenAI/LiteLLM response format.
+            if (data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') {
+                return data.choices[0].message.content;
+            }
+
+            // Fallback for non-standard or older gateway implementations.
+            if (typeof data.text === 'string') {
+                 return data.text;
+            }
+            
+            throw new Error('The AI Gateway response was successful but did not contain the expected content in "choices[0].message.content" or "text" format.');
+        } catch (error) {
+            console.error('[AI Service] Error during Gateway fetch operation:', error);
+            throw error;
         }
-        
-        throw new Error('The AI Gateway response was successful but did not contain the expected content in "choices[0].message.content" or "text" format.');
 
     } else { // Default to the 'GEMINI' provider
         if (!geminiApiKey) {
-            throw new Error('Direct Gemini is the configured provider, but VITE_API_KEY is missing in the .env.local file.');
+            const errorMsg = 'Direct Gemini is the configured provider, but VITE_API_KEY is missing in the .env file.';
+            console.error(`[AI Service] Aborting request. ${errorMsg}`);
+            throw new Error(errorMsg);
         }
-        console.log('[AI Service] Using direct Gemini API.');
+        console.log(`[AI Service] Using direct Gemini API with model: ${GEMINI_MODEL}`);
         
-        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-        const genAIResponse = await ai.models.generateContent({
-            model: GEMINI_MODEL,
-            contents: prompt,
-        });
+        try {
+            const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+            const genAIResponse = await ai.models.generateContent({
+                model: GEMINI_MODEL,
+                contents: prompt,
+            });
 
-        // FIX: The `text` accessor on GenerateContentResponse can be undefined.
-        // Provide a fallback empty string to satisfy the function's string return type.
-        return genAIResponse.text || '';
+            // FIX: The `text` accessor on GenerateContentResponse can be undefined.
+            // Provide a fallback empty string to satisfy the function's string return type.
+            const responseText = genAIResponse.text || '';
+            console.log('[AI Service] Received response from Gemini API.');
+            return responseText;
+        } catch (error) {
+            console.error('[AI Service] Error calling Gemini API:', error);
+            throw error;
+        }
     }
 };
 
@@ -137,10 +182,13 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
 
     // This function must use the direct Gemini API because it relies on specific features like responseSchema.
     if (!geminiApiKey) {
-        throw new Error('Direct Gemini is required for flashcard generation, but VITE_API_KEY is missing in the .env.local file.');
+        const errorMsg = 'Direct Gemini is required for flashcard generation, but VITE_API_KEY is missing in the .env file.';
+        console.error(`[AI Service] Aborting flashcard generation. ${errorMsg}`);
+        throw new Error(errorMsg);
     }
     
     try {
+        console.log('[AI Service] Generating flashcards using Gemini API.');
         const ai = new GoogleGenAI({ apiKey: geminiApiKey });
         const genAIResponse = await ai.models.generateContent({
             model: GEMINI_MODEL,
@@ -153,16 +201,20 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
 
         // The `text` accessor on GenerateContentResponse is a property.
         const jsonString = genAIResponse.text || '[]';
+        console.log('[AI Service] Raw JSON response for flashcards:', jsonString);
+
         const flashcards = JSON.parse(jsonString);
 
         if (!Array.isArray(flashcards)) {
+            console.error('[AI Service] Flashcard generation returned non-array data:', flashcards);
             throw new Error('AI response was not a valid JSON array.');
         }
-
+        
+        console.log(`[AI Service] Successfully generated ${flashcards.length} flashcards.`);
         return flashcards as Omit<Flashcard, 'id'>[];
 
     } catch (error) {
-        console.error("Error generating flashcards:", error);
+        console.error("[AI Service] Error generating flashcards:", error);
         throw new Error("Failed to generate flashcards from the provided text.");
     }
 };

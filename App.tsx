@@ -563,12 +563,13 @@ const App: React.FC = () => {
                 ${userInput}
             `;
             
+            console.log('[App] Sending the following prompt to AI Service:', { prompt });
             const geminiText = await generateContentFromPrompt(prompt);
             addMessage({ actor: Actor.BOT, content: geminiText, isGemini: true });
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            console.error("Error calling AI Service:", error);
+            console.error("[App] A detailed error occurred while asking Gemini:", error);
             addMessage({ actor: Actor.BOT, content: `Sorry, I had trouble connecting to the AI assistant. Please check the console and your environment variables. Error: ${errorMessage}`, isGemini: true });
         } finally {
             setIsLoading(false);
@@ -582,6 +583,7 @@ const App: React.FC = () => {
         });
         
         try {
+            console.log('[App] Generating flashcards with knowledge base text.');
             const newCardsData = await generateFlashcardsFromText(newKnowledge);
             const validNewCards = newCardsData.filter(card => card.question && card.answer);
             
@@ -605,7 +607,7 @@ const App: React.FC = () => {
                  setGeneratedFlashcards([]); // Clear any old ones
             }
         } catch (error) {
-            console.error("Failed to update flashcards:", error);
+            console.error("[App] A detailed error occurred while generating flashcards:", error);
             addMessage({
                 actor: Actor.BOT,
                 content: "Sorry, I had trouble generating new tips from that document. The default tips are still available."
