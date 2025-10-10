@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { Flashcard } from '../types';
+import { Flashcard, GeminiModel } from '../types';
 
 // This `declare` block informs TypeScript that the `process` object is globally available.
 // Vite's `define` configuration will replace these variables with their actual values
@@ -16,7 +16,7 @@ declare var process: {
   }
 };
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL: GeminiModel = 'gemini-2.5-flash';
 
 // Read configuration from the process.env object. Vite's `define` config replaces these
 // variable names with their literal string values during the build.
@@ -109,10 +109,11 @@ const _callAiGateway = async (callName: string, requestBody: { model: string, [k
  * This function abstracts the API call, allowing for flexible backend configurations.
  * 
  * @param prompt - The full prompt string to send to the model.
+ * @param modelOverride - An optional model name to use for direct Gemini calls, overriding the default.
  * @returns A promise that resolves with the generated text as a string.
  * @throws An error if the required environment variables for the selected provider are missing.
  */
-export const generateContentFromPrompt = async (prompt: string): Promise<string> => {
+export const generateContentFromPrompt = async (prompt: string, modelOverride?: GeminiModel): Promise<string> => {
     if (aiProvider === 'GATEWAY') {
         const modelToUse = gatewayModel || GEMINI_MODEL;
         console.log(`[AI Service] Using AI Gateway. Base URL: ${gatewayUrl}, Model: ${modelToUse}`);
@@ -160,12 +161,13 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
             console.error(`[AI Service] Aborting request. ${errorMsg}`);
             throw new Error(errorMsg);
         }
-        console.log(`[AI Service] Using direct Gemini API with model: ${GEMINI_MODEL}`);
+        const modelToUse = modelOverride || GEMINI_MODEL;
+        console.log(`[AI Service] Using direct Gemini API with model: %c${modelToUse}`, 'font-weight: bold;');
         
         try {
             const ai = new GoogleGenAI({ apiKey: geminiApiKey });
             const genAIResponse = await ai.models.generateContent({
-                model: GEMINI_MODEL,
+                model: modelToUse,
                 contents: prompt,
             });
 
@@ -185,9 +187,10 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
  * Analyzes a given text and generates a set of flashcards (Q&A pairs) using the configured AI Provider.
  * 
  * @param text The knowledge base content to analyze.
+ * @param modelOverride - An optional model name to use for direct Gemini calls, overriding the default.
  * @returns A promise that resolves with an array of flashcard objects (without IDs).
  */
-export const generateFlashcardsFromText = async (text: string): Promise<Omit<Flashcard, 'id'>[]> => {
+export const generateFlashcardsFromText = async (text: string, modelOverride?: GeminiModel): Promise<Omit<Flashcard, 'id'>[]> => {
     const prompt = `
         SYSTEM INSTRUCTION: You are an assistant that creates helpful learning flashcards. Analyze the following text from a knowledge base. Generate 5 to 7 concise question-and-answer pairs that would be useful for a user trying to learn this material. The questions should be things a user might ask, and the answers should be direct and informative. Focus on the most important concepts, rules, or processes in the text. Your response MUST be a single valid JSON array of objects, where each object has "question" and "answer" properties. Do not wrap the array in a parent object.
 
@@ -239,6 +242,9 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
             throw new Error(errorMsg);
         }
         
+        const modelToUse = modelOverride || GEMINI_MODEL;
+        console.log(`[AI Service] Generating flashcards using direct Gemini API with model: %c${modelToUse}`, 'font-weight: bold;');
+        
         const responseSchema = {
             type: Type.ARRAY,
             items: {
@@ -252,10 +258,9 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
         };
 
         try {
-            console.log('[AI Service] Generating flashcards using direct Gemini API.');
             const ai = new GoogleGenAI({ apiKey: geminiApiKey });
             const genAIResponse = await ai.models.generateContent({
-                model: GEMINI_MODEL,
+                model: modelToUse,
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json",

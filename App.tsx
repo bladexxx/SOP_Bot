@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard } from './types';
+import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel } from './types';
 import { CardRenderer } from './components/CardRenderer';
-import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon } from './components/Icons';
+import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon, SettingsIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
 import { DemoGuideModal } from './components/DemoGuideModal';
+import { SettingsModal } from './components/SettingsModal';
 import { generateContentFromPrompt, generateFlashcardsFromText } from './services/aiService';
 import { triggerNiFiFlow } from './services/nifiService';
 import { sopDefinitions } from './components/SopTimeline';
@@ -234,7 +235,8 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, version, name,
   );
 };
 
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.4';
+const SETTINGS_STORAGE_KEY = 'flowx-sop-bot-settings';
 
 const App: React.FC = () => {
     const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -247,6 +249,7 @@ const App: React.FC = () => {
     const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
     const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
     const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [appMetadata, setAppMetadata] = useState<{name: string, description: string} | null>(null);
     const [knowledgeBase, setKnowledgeBase] = useState<string>('');
     const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
@@ -259,6 +262,32 @@ const App: React.FC = () => {
     const [configs, setConfigs] = useState<Configuration[]>(mockConfigsData);
     const [templates, setTemplates] = useState<ConfigTemplate[]>(mockTemplatesData);
     const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
+
+    const [appSettings, setAppSettings] = useState<AppSettings>(() => {
+        try {
+            const savedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+            return savedSettings ? JSON.parse(savedSettings) : {
+                nifiUrl: 'http://localhost:8080',
+                nifiEndpoint: '/nifi-api/processors/your-processor-id/run',
+                geminiModel: 'gemini-2.5-flash',
+            };
+        } catch (error) {
+            console.error("Failed to parse settings from localStorage:", error);
+            return {
+                nifiUrl: 'http://localhost:8080',
+                nifiEndpoint: '/nifi-api/processors/your-processor-id/run',
+                geminiModel: 'gemini-2.5-flash',
+            };
+        }
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings));
+        } catch (error) {
+            console.error("Failed to save settings to localStorage:", error);
+        }
+    }, [appSettings]);
     
     // Using a ref for handleCardAction to prevent stale closures in triggerSopStep
     // FIX: Initialize useRef with null and update the type to allow null to fix the TypeScript error.
@@ -564,7 +593,7 @@ const App: React.FC = () => {
             `;
             
             console.log('[App] Sending the following prompt to AI Service:', { prompt });
-            const geminiText = await generateContentFromPrompt(prompt);
+            const geminiText = await generateContentFromPrompt(prompt, appSettings.geminiModel);
             addMessage({ actor: Actor.BOT, content: geminiText, isGemini: true });
 
         } catch (error) {
@@ -584,7 +613,7 @@ const App: React.FC = () => {
         
         try {
             console.log('[App] Generating flashcards with knowledge base text.');
-            const newCardsData = await generateFlashcardsFromText(newKnowledge);
+            const newCardsData = await generateFlashcardsFromText(newKnowledge, appSettings.geminiModel);
             const validNewCards = newCardsData.filter(card => card.question && card.answer);
             
             if (validNewCards.length > 0) {
@@ -613,7 +642,7 @@ const App: React.FC = () => {
                 content: "Sorry, I had trouble generating new tips from that document. The default tips are still available."
             });
         }
-    }, [addMessage]);
+    }, [addMessage, appSettings.geminiModel]);
 
     const handleKnowledgeFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -905,7 +934,7 @@ const App: React.FC = () => {
                             path: payload.path,
                             benchmarkId: payload.benchmarkId,
                             config: payload.config
-                        });
+                        }, { nifiUrl: appSettings.nifiUrl, nifiEndpoint: appSettings.nifiEndpoint });
 
                         addMessage({
                             actor: Actor.BOT,
@@ -957,7 +986,7 @@ const App: React.FC = () => {
                         file: payload.file,
                         benchmarkId: payload.benchmarkId,
                         config: payload.config
-                    });
+                    }, { nifiUrl: appSettings.nifiUrl, nifiEndpoint: appSettings.nifiEndpoint });
             
                     addMessage({
                         actor: Actor.BOT,
@@ -1100,7 +1129,7 @@ const App: React.FC = () => {
         }
 
         setIsLoading(false);
-    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, updateFlashcardsFromKnowledgeBase, knowledgeBase]);
+    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, updateFlashcardsFromKnowledgeBase, knowledgeBase, appSettings]);
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -1184,6 +1213,16 @@ const App: React.FC = () => {
                     isOpen={isDemoModalOpen}
                     onClose={() => setIsDemoModalOpen(false)}
                 />
+                 <SettingsModal
+                    isOpen={isSettingsModalOpen}
+                    onClose={() => setIsSettingsModalOpen(false)}
+                    currentSettings={appSettings}
+                    onSave={(newSettings) => {
+                        setAppSettings(newSettings);
+                        setIsSettingsModalOpen(false);
+                        addMessage({ actor: Actor.BOT, content: "Settings have been updated." });
+                    }}
+                />
                 {appMetadata && (
                     <AboutModal
                         isOpen={isAboutModalOpen}
@@ -1218,6 +1257,14 @@ const App: React.FC = () => {
                             className="w-full bg-gray-100 text-gray-800 placeholder-gray-500 border border-gray-300 rounded-md py-2 pl-10 pr-20 focus:outline-none focus:ring-2 focus:ring-teal-600"
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-1">
+                             <button
+                                onClick={() => setIsSettingsModalOpen(true)}
+                                className="p-1 text-gray-500 hover:text-gray-800 transition-colors"
+                                aria-label="Open settings"
+                                title="Open settings"
+                            >
+                                <SettingsIcon className="h-6 w-6" />
+                            </button>
                             <button
                                 onClick={() => setIsDemoModalOpen(true)}
                                 className="p-1 text-gray-500 hover:text-gray-800 transition-colors"

@@ -113,3 +113,11 @@ export interface Flashcard {
     question: string;
     answer: string;
 }
+
+export type GeminiModel = 'gemini-2.0-flash' | 'gemini-2.5-flash' | 'gemini-2.5-pro';
+
+export interface AppSettings {
+  nifiUrl: string;
+  nifiEndpoint: string;
+  geminiModel: GeminiModel;
+}
