@@ -8,6 +8,7 @@ declare var process: {
     API_KEY: string;
     AI_GATEWAY_URL: string;
     AI_GATEWAY_API_KEY: string;
+    AI_GATEWAY_MODEL: string;
   }
 };
 
@@ -18,6 +19,7 @@ const aiProvider = process.env.AI_PROVIDER || 'GEMINI';
 const geminiApiKey = process.env.API_KEY;
 const gatewayUrl = process.env.AI_GATEWAY_URL;
 const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
+const gatewayModel = process.env.AI_GATEWAY_MODEL;
 
 /**
  * Generates content using the configured AI provider (Direct Gemini or an AI Gateway).
@@ -32,10 +34,26 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
         if (!gatewayUrl || !gatewayApiKey) {
             throw new Error('AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in the .env.local file.');
         }
-        console.log(`[AI Service] Using AI Gateway at: ${gatewayUrl}`);
+        const modelToUse = gatewayModel || GEMINI_MODEL;
+        console.log(`[AI Service] Using AI Gateway at: ${gatewayUrl} with model: ${modelToUse}`);
 
-        // This simulates a POST request to a unified AI Gateway.
-        // The body structure is a common pattern for such gateways.
+        // This implementation is now compatible with LiteLLM's OpenAI-proxy endpoint.
+        // It parses the prompt into a structured message format.
+        let systemContent = '';
+        let userContent = prompt;
+
+        const systemInstructionMatch = prompt.match(/SYSTEM INSTRUCTION:(.*?)---/s);
+        if (systemInstructionMatch && systemInstructionMatch[1]) {
+            systemContent = systemInstructionMatch[1].trim();
+            userContent = prompt.substring(systemInstructionMatch[0].length).trim();
+        }
+
+        const messages = [];
+        if (systemContent) {
+            messages.push({ role: 'system', content: systemContent });
+        }
+        messages.push({ role: 'user', content: userContent });
+        
         const response = await fetch(gatewayUrl, {
             method: 'POST',
             headers: {
@@ -43,8 +61,8 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
                 'Authorization': `Bearer ${gatewayApiKey}`
             },
             body: JSON.stringify({
-                model: GEMINI_MODEL,
-                contents: prompt,
+                model: modelToUse,
+                messages: messages,
             })
         });
 
@@ -55,11 +73,17 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
 
         const data = await response.json();
         
-        // This assumes the gateway returns a JSON object with a 'text' property, similar to the direct SDK.
-        if (typeof data.text !== 'string') {
-             throw new Error('The AI Gateway response was successful but did not contain a "text" property in the expected format.');
+        // Handle standard OpenAI/LiteLLM response format.
+        if (data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') {
+            return data.choices[0].message.content;
         }
-        return data.text;
+
+        // Fallback for non-standard or older gateway implementations.
+        if (typeof data.text === 'string') {
+             return data.text;
+        }
+        
+        throw new Error('The AI Gateway response was successful but did not contain the expected content in "choices[0].message.content" or "text" format.');
 
     } else { // Default to the 'GEMINI' provider
         if (!geminiApiKey) {
