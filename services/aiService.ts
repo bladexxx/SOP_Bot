@@ -1,44 +1,51 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { Flashcard } from '../types';
 
-// Define `process` for client-side type checking, as Vite's `define` makes it available at runtime.
+// This `declare` block informs TypeScript that the `process` object is globally available.
+// Vite's `define` configuration will replace these variables with their actual values
+// at build time, preventing runtime errors.
 declare var process: {
   env: {
-    AI_PROVIDER: string;
+    // This variable is provided by the execution environment, not Vite's define config.
     API_KEY: string;
-    AI_GATEWAY_URL: string;
-    AI_GATEWAY_API_KEY: string;
-    AI_GATEWAY_MODEL: string;
+    // These variables are injected by Vite's define config.
+    VITE_AI_PROVIDER: string;
+    VITE_AI_GATEWAY_URL: string;
+    VITE_AI_GATEWAY_API_KEY: string;
+    VITE_AI_GATEWAY_MODEL: string;
   }
 };
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
-// Read configuration from environment variables, defaulting to 'GEMINI' provider.
-const aiProvider = process.env.AI_PROVIDER || 'GEMINI';
+// Read configuration from the process.env object. Vite's `define` config replaces these
+// variable names with their literal string values during the build.
+const aiProvider = process.env.VITE_AI_PROVIDER;
+const gatewayUrl = process.env.VITE_AI_GATEWAY_URL;
+const gatewayApiKey = process.env.VITE_AI_GATEWAY_API_KEY;
+const gatewayModel = process.env.VITE_AI_GATEWAY_MODEL;
+
+
+// Per project guidelines, the Gemini API key MUST come exclusively from the execution
+// environment's `process.env.API_KEY`.
 const geminiApiKey = process.env.API_KEY;
-const gatewayUrl = process.env.AI_GATEWAY_URL;
-const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
-const gatewayModel = process.env.AI_GATEWAY_MODEL;
 
 // --- Startup Logging: Log the configuration as soon as the module is loaded ---
 console.groupCollapsed('[AI Service] Configuration Loaded');
 console.info(`AI Provider: %c${aiProvider}`, 'font-weight: bold;');
 if (aiProvider === 'GATEWAY') {
     console.log(`Gateway URL: ${gatewayUrl || 'Not Set'}`);
-    console.log(`Gateway Model: ${gatewayModel || `(not set, will default to ${GEMINI_MODEL})`}`);
-    const maskedGatewayKey = gatewayApiKey ? `${gatewayApiKey.substring(0, 4)}...${gatewayApiKey.slice(-4)}` : 'Not Set';
+    console.log(`Gateway Model: ${gatewayModel || `(default: ${GEMINI_MODEL})`}`);
     console.log(`Gateway API Key Set: %c${!!gatewayApiKey}`, `font-weight: bold; color: ${!!gatewayApiKey ? 'green' : 'red'};`);
 } else {
-    const maskedGeminiKey = geminiApiKey ? `${geminiApiKey.substring(0, 4)}...${geminiApiKey.slice(-4)}` : 'Not Set';
      console.log(`Gemini API Key Set: %c${!!geminiApiKey}`, `font-weight: bold; color: ${!!geminiApiKey ? 'green' : 'red'};`);
 }
 console.groupEnd();
 
 if (aiProvider === 'GATEWAY' && (!gatewayUrl || !gatewayApiKey)) {
     console.error('[AI Service] CRITICAL: AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in your .env file.');
-} else if (aiProvider !== 'GATEWAY' && !geminiApiKey) {
-    console.error('[AI Service] CRITICAL: Direct Gemini is the configured provider, but VITE_API_KEY is missing in your .env file.');
+} else if (aiProvider === 'GEMINI' && !geminiApiKey) {
+    console.error('[AI Service] CRITICAL: Gemini is the configured provider, but the API_KEY was not found in the environment. This must be configured in the execution environment where the app is hosted.');
 }
 // --- End of Startup Logging ---
 
@@ -123,7 +130,7 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
 
     } else { // Default to the 'GEMINI' provider
         if (!geminiApiKey) {
-            const errorMsg = 'Direct Gemini is the configured provider, but VITE_API_KEY is missing in the .env file.';
+            const errorMsg = 'Gemini is the configured provider, but the API_KEY is missing in the execution environment.';
             console.error(`[AI Service] Aborting request. ${errorMsg}`);
             throw new Error(errorMsg);
         }
@@ -136,7 +143,7 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
                 contents: prompt,
             });
 
-            // FIX: The `text` accessor on GenerateContentResponse can be undefined.
+            // The `text` accessor on GenerateContentResponse can be undefined.
             // Provide a fallback empty string to satisfy the function's string return type.
             const responseText = genAIResponse.text || '';
             console.log('[AI Service] Received response from Gemini API.');
@@ -182,7 +189,7 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
 
     // This function must use the direct Gemini API because it relies on specific features like responseSchema.
     if (!geminiApiKey) {
-        const errorMsg = 'Direct Gemini is required for flashcard generation, but VITE_API_KEY is missing in the .env file.';
+        const errorMsg = 'Direct Gemini is required for flashcard generation, but the API_KEY is missing in the execution environment.';
         console.error(`[AI Service] Aborting flashcard generation. ${errorMsg}`);
         throw new Error(errorMsg);
     }
