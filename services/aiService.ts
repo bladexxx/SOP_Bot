@@ -34,7 +34,8 @@ const geminiApiKey = process.env.API_KEY;
 console.groupCollapsed('[AI Service] Configuration Loaded');
 console.info(`AI Provider: %c${aiProvider}`, 'font-weight: bold;');
 if (aiProvider === 'GATEWAY') {
-    console.log(`Gateway URL: ${gatewayUrl || 'Not Set'}`);
+    console.log(`Gateway Base URL: ${gatewayUrl || 'Not Set'}`);
+    console.info(`(Note: The final URL will be constructed as \`{Base URL}/{Model}/v1/chat/completions\`)`);
     console.log(`Gateway Model: ${gatewayModel || `(default: ${GEMINI_MODEL})`}`);
     console.log(`Gateway API Key Set: %c${!!gatewayApiKey}`, `font-weight: bold; color: ${!!gatewayApiKey ? 'green' : 'red'};`);
 } else {
@@ -50,24 +51,33 @@ if (aiProvider === 'GATEWAY' && (!gatewayUrl || !gatewayApiKey)) {
 // --- End of Startup Logging ---
 
 /**
- * Internal helper to make a POST request to the AI Gateway.
+ * Internal helper to make a POST request to the AI Gateway, following an OpenAI-compatible /v1/chat/completions structure.
  * It centralizes fetch logic, authorization, error handling, and logging.
  *
  * @param callName - A name for the call, used for logging (e.g., 'content generation').
- * @param requestBody - The JSON object to send in the request body.
+ * @param requestBody - The JSON object to send in the request body. Must include a 'model' property.
  * @returns The parsed JSON response from the gateway.
  */
-const _callAiGateway = async (callName: string, requestBody: object): Promise<any> => {
+const _callAiGateway = async (callName: string, requestBody: { model: string, [key: string]: any }): Promise<any> => {
     if (!gatewayUrl || !gatewayApiKey) {
         const errorMsg = 'AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in the .env file.';
         console.error(`[AI Service] Aborting gateway request for ${callName}. ${errorMsg}`);
         throw new Error(errorMsg);
     }
     
+    const modelInBody = requestBody.model;
+    if (!modelInBody) {
+        throw new Error('The request body for gateway calls must contain a "model" property.');
+    }
+    
+    // Construct the dynamic URL based on the user's example: {base_url}/{model_name}/v1/chat/completions
+    const fullGatewayUrl = `${gatewayUrl}/${modelInBody}/v1/chat/completions`;
+
+    console.log(`[AI Service] Sending ${callName} request to Gateway URL: %c${fullGatewayUrl}`, 'font-weight: bold;');
     console.log(`[AI Service] Sending ${callName} request to Gateway with body:`, JSON.stringify(requestBody, null, 2));
 
     try {
-        const response = await fetch(gatewayUrl, {
+        const response = await fetch(fullGatewayUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -105,7 +115,7 @@ const _callAiGateway = async (callName: string, requestBody: object): Promise<an
 export const generateContentFromPrompt = async (prompt: string): Promise<string> => {
     if (aiProvider === 'GATEWAY') {
         const modelToUse = gatewayModel || GEMINI_MODEL;
-        console.log(`[AI Service] Using AI Gateway at: ${gatewayUrl} with model: ${modelToUse}`);
+        console.log(`[AI Service] Using AI Gateway. Base URL: ${gatewayUrl}, Model: ${modelToUse}`);
 
         // This implementation is now compatible with LiteLLM's OpenAI-proxy endpoint.
         // It parses the prompt into a structured message format.
@@ -127,6 +137,7 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
         const requestBody = {
             model: modelToUse,
             messages: messages,
+            stream: false, // Explicitly set stream to false as per user's example
         };
 
         const data = await _callAiGateway('content generation', requestBody);
@@ -186,13 +197,14 @@ export const generateFlashcardsFromText = async (text: string): Promise<Omit<Fla
     
     if (aiProvider === 'GATEWAY') {
         const modelToUse = gatewayModel || GEMINI_MODEL;
-        console.log(`[AI Service] Generating flashcards via AI Gateway at: ${gatewayUrl} with model: ${modelToUse}`);
+        console.log(`[AI Service] Generating flashcards via AI Gateway. Base URL: ${gatewayUrl}, Model: ${modelToUse}`);
 
         const requestBody = {
             model: modelToUse,
             messages: [{ role: 'user', content: prompt }],
             // For OpenAI-compatible endpoints, this hint greatly improves reliability of JSON output.
             response_format: { type: "json_object" }, 
+            stream: false, // Explicitly set stream to false as per user's example
         };
 
         try {
