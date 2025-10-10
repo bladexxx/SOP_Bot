@@ -50,6 +50,51 @@ if (aiProvider === 'GATEWAY' && (!gatewayUrl || !gatewayApiKey)) {
 // --- End of Startup Logging ---
 
 /**
+ * Internal helper to make a POST request to the AI Gateway.
+ * It centralizes fetch logic, authorization, error handling, and logging.
+ *
+ * @param callName - A name for the call, used for logging (e.g., 'content generation').
+ * @param requestBody - The JSON object to send in the request body.
+ * @returns The parsed JSON response from the gateway.
+ */
+const _callAiGateway = async (callName: string, requestBody: object): Promise<any> => {
+    if (!gatewayUrl || !gatewayApiKey) {
+        const errorMsg = 'AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in the .env file.';
+        console.error(`[AI Service] Aborting gateway request for ${callName}. ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+    
+    console.log(`[AI Service] Sending ${callName} request to Gateway with body:`, JSON.stringify(requestBody, null, 2));
+
+    try {
+        const response = await fetch(gatewayUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${gatewayApiKey}`
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const responseText = await response.text();
+        console.log(`[AI Service] Gateway response status for ${callName}: ${response.status}`);
+        console.log(`[AI Service] Raw gateway response body for ${callName}:`, responseText);
+
+        if (!response.ok) {
+            throw new Error(`AI Gateway request for ${callName} failed with status ${response.status}: ${responseText}`);
+        }
+
+        const data = JSON.parse(responseText);
+        console.log(`[AI Service] Parsed gateway response data for ${callName}:`, data);
+        return data;
+    } catch (error) {
+        console.error(`[AI Service] Error during Gateway fetch operation for ${callName}:`, error);
+        throw error;
+    }
+};
+
+
+/**
  * Generates content using the configured AI provider (Direct Gemini or an AI Gateway).
  * This function abstracts the API call, allowing for flexible backend configurations.
  * 
@@ -59,11 +104,6 @@ if (aiProvider === 'GATEWAY' && (!gatewayUrl || !gatewayApiKey)) {
  */
 export const generateContentFromPrompt = async (prompt: string): Promise<string> => {
     if (aiProvider === 'GATEWAY') {
-        if (!gatewayUrl || !gatewayApiKey) {
-            const errorMsg = 'AI Gateway is the configured provider, but VITE_AI_GATEWAY_URL or VITE_AI_GATEWAY_API_KEY is missing in the .env file.';
-            console.error(`[AI Service] Aborting request. ${errorMsg}`);
-            throw new Error(errorMsg);
-        }
         const modelToUse = gatewayModel || GEMINI_MODEL;
         console.log(`[AI Service] Using AI Gateway at: ${gatewayUrl} with model: ${modelToUse}`);
 
@@ -89,44 +129,19 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
             messages: messages,
         };
 
-        console.log('[AI Service] Sending request to Gateway with body:', JSON.stringify(requestBody, null, 2));
-
-        try {
-            const response = await fetch(gatewayUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${gatewayApiKey}`
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const responseText = await response.text();
-            console.log(`[AI Service] Gateway response status: ${response.status}`);
-            console.log('[AI Service] Raw gateway response body:', responseText);
-
-            if (!response.ok) {
-                throw new Error(`AI Gateway request failed with status ${response.status}: ${responseText}`);
-            }
-
-            const data = JSON.parse(responseText);
-            console.log('[AI Service] Parsed gateway response data:', data);
-            
-            // Handle standard OpenAI/LiteLLM response format.
-            if (data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') {
-                return data.choices[0].message.content;
-            }
-
-            // Fallback for non-standard or older gateway implementations.
-            if (typeof data.text === 'string') {
-                 return data.text;
-            }
-            
-            throw new Error('The AI Gateway response was successful but did not contain the expected content in "choices[0].message.content" or "text" format.');
-        } catch (error) {
-            console.error('[AI Service] Error during Gateway fetch operation:', error);
-            throw error;
+        const data = await _callAiGateway('content generation', requestBody);
+        
+        // Handle standard OpenAI/LiteLLM response format.
+        if (data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') {
+            return data.choices[0].message.content;
         }
+
+        // Fallback for non-standard or older gateway implementations.
+        if (typeof data.text === 'string') {
+             return data.text;
+        }
+        
+        throw new Error('The AI Gateway response was successful but did not contain the expected content in "choices[0].message.content" or "text" format.');
 
     } else { // Default to the 'GEMINI' provider
         if (!geminiApiKey) {
@@ -156,72 +171,100 @@ export const generateContentFromPrompt = async (prompt: string): Promise<string>
 };
 
 /**
- * Analyzes a given text and generates a set of flashcards (Q&A pairs) using the Gemini API.
+ * Analyzes a given text and generates a set of flashcards (Q&A pairs) using the configured AI Provider.
  * 
  * @param text The knowledge base content to analyze.
  * @returns A promise that resolves with an array of flashcard objects (without IDs).
  */
 export const generateFlashcardsFromText = async (text: string): Promise<Omit<Flashcard, 'id'>[]> => {
     const prompt = `
-        SYSTEM INSTRUCTION: You are an assistant that creates helpful learning flashcards. Analyze the following text from a knowledge base. Generate 5 to 7 concise question-and-answer pairs that would be useful for a user trying to learn this material. The questions should be things a user might ask, and the answers should be direct and informative. Focus on the most important concepts, rules, or processes in the text. Format the output as a JSON array of objects, where each object has "question" and "answer" properties.
+        SYSTEM INSTRUCTION: You are an assistant that creates helpful learning flashcards. Analyze the following text from a knowledge base. Generate 5 to 7 concise question-and-answer pairs that would be useful for a user trying to learn this material. The questions should be things a user might ask, and the answers should be direct and informative. Focus on the most important concepts, rules, or processes in the text. Your response MUST be a single valid JSON array of objects, where each object has "question" and "answer" properties. Do not wrap the array in a parent object.
 
         KNOWLEDGE BASE TEXT:
         ${text}
     `;
-
-    const responseSchema = {
-        type: Type.ARRAY,
-        items: {
-            type: Type.OBJECT,
-            properties: {
-                question: {
-                    type: Type.STRING,
-                    description: "The question for the flashcard."
-                },
-                answer: {
-                    type: Type.STRING,
-                    description: "The answer to the question."
-                }
-            },
-            required: ["question", "answer"]
-        }
-    };
-
-    // This function must use the direct Gemini API because it relies on specific features like responseSchema.
-    if (!geminiApiKey) {
-        const errorMsg = 'Direct Gemini is required for flashcard generation, but the API_KEY is missing in the execution environment.';
-        console.error(`[AI Service] Aborting flashcard generation. ${errorMsg}`);
-        throw new Error(errorMsg);
-    }
     
-    try {
-        console.log('[AI Service] Generating flashcards using Gemini API.');
-        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-        const genAIResponse = await ai.models.generateContent({
-            model: GEMINI_MODEL,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
-            },
-        });
+    if (aiProvider === 'GATEWAY') {
+        const modelToUse = gatewayModel || GEMINI_MODEL;
+        console.log(`[AI Service] Generating flashcards via AI Gateway at: ${gatewayUrl} with model: ${modelToUse}`);
 
-        // The `text` accessor on GenerateContentResponse is a property.
-        const jsonString = genAIResponse.text || '[]';
-        console.log('[AI Service] Raw JSON response for flashcards:', jsonString);
+        const requestBody = {
+            model: modelToUse,
+            messages: [{ role: 'user', content: prompt }],
+            // For OpenAI-compatible endpoints, this hint greatly improves reliability of JSON output.
+            response_format: { type: "json_object" }, 
+        };
 
-        const flashcards = JSON.parse(jsonString);
+        try {
+            const data = await _callAiGateway('flashcard generation', requestBody);
+            const jsonString = data.choices?.[0]?.message?.content;
 
-        if (!Array.isArray(flashcards)) {
-            console.error('[AI Service] Flashcard generation returned non-array data:', flashcards);
-            throw new Error('AI response was not a valid JSON array.');
+            if (typeof jsonString !== 'string') {
+                 throw new Error('AI Gateway response for flashcards did not contain a valid string in "choices[0].message.content".');
+            }
+
+            console.log('[AI Service] Raw JSON string for flashcards from gateway:', jsonString);
+            
+            // Attempt to parse the content string into a JSON array
+            const flashcards = JSON.parse(jsonString);
+
+            if (!Array.isArray(flashcards)) {
+                console.error('[AI Service] Flashcard generation via gateway returned non-array data:', flashcards);
+                throw new Error('The AI gateway response was not a valid JSON array.');
+            }
+            
+            console.log(`[AI Service] Successfully generated ${flashcards.length} flashcards via Gateway.`);
+            return flashcards as Omit<Flashcard, 'id'>[];
+
+        } catch (error) {
+            console.error("[AI Service] Error generating flashcards via Gateway:", error);
+            throw new Error(`Failed to generate flashcards from the provided text via gateway. Details: ${error}`);
+        }
+    } else { // Direct Gemini logic
+        if (!geminiApiKey) {
+            const errorMsg = 'Direct Gemini is required for flashcard generation, but the API_KEY is missing in the execution environment.';
+            console.error(`[AI Service] Aborting flashcard generation. ${errorMsg}`);
+            throw new Error(errorMsg);
         }
         
-        console.log(`[AI Service] Successfully generated ${flashcards.length} flashcards.`);
-        return flashcards as Omit<Flashcard, 'id'>[];
+        const responseSchema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    question: { type: Type.STRING, description: "The question for the flashcard." },
+                    answer: { type: Type.STRING, description: "The answer to the question." }
+                },
+                required: ["question", "answer"]
+            }
+        };
 
-    } catch (error) {
-        console.error("[AI Service] Error generating flashcards:", error);
-        throw new Error("Failed to generate flashcards from the provided text.");
+        try {
+            console.log('[AI Service] Generating flashcards using direct Gemini API.');
+            const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+            const genAIResponse = await ai.models.generateContent({
+                model: GEMINI_MODEL,
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema,
+                },
+            });
+
+            const jsonString = genAIResponse.text || '[]';
+            console.log('[AI Service] Raw JSON response for flashcards from Gemini:', jsonString);
+            const flashcards = JSON.parse(jsonString);
+
+            if (!Array.isArray(flashcards)) {
+                console.error('[AI Service] Flashcard generation from Gemini returned non-array data:', flashcards);
+                throw new Error('AI response was not a valid JSON array.');
+            }
+            
+            console.log(`[AI Service] Successfully generated ${flashcards.length} flashcards via Gemini.`);
+            return flashcards as Omit<Flashcard, 'id'>[];
+        } catch (error) {
+            console.error("[AI Service] Error generating flashcards with Gemini:", error);
+            throw new Error(`Failed to generate flashcards from the provided text. Details: ${error}`);
+        }
     }
 };
