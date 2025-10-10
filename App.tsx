@@ -237,6 +237,8 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, version, name,
 
 const APP_VERSION = '1.4';
 const SETTINGS_STORAGE_KEY = 'flowx-sop-bot-settings';
+const KNOWLEDGE_BASE_STORAGE_KEY = 'flowx-sop-bot-knowledge-base';
+const GENERATED_FLASHCARDS_STORAGE_KEY = 'flowx-sop-bot-generated-flashcards';
 
 const App: React.FC = () => {
     const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -251,8 +253,6 @@ const App: React.FC = () => {
     const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [appMetadata, setAppMetadata] = useState<{name: string, description: string} | null>(null);
-    const [knowledgeBase, setKnowledgeBase] = useState<string>('');
-    const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
     const [panelWidth, setPanelWidth] = useState(448); // 28rem = 448px
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLDivElement>(null);
@@ -262,6 +262,25 @@ const App: React.FC = () => {
     const [configs, setConfigs] = useState<Configuration[]>(mockConfigsData);
     const [templates, setTemplates] = useState<ConfigTemplate[]>(mockTemplatesData);
     const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
+
+    const [knowledgeBase, setKnowledgeBase] = useState<string>(() => {
+        try {
+            return localStorage.getItem(KNOWLEDGE_BASE_STORAGE_KEY) || '';
+        } catch (error) {
+            console.error("Failed to read knowledge base from localStorage:", error);
+            return '';
+        }
+    });
+
+    const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>(() => {
+        try {
+            const savedCards = localStorage.getItem(GENERATED_FLASHCARDS_STORAGE_KEY);
+            return savedCards ? JSON.parse(savedCards) : [];
+        } catch (error) {
+            console.error("Failed to parse generated flashcards from localStorage:", error);
+            return [];
+        }
+    });
 
     const [appSettings, setAppSettings] = useState<AppSettings>(() => {
         try {
@@ -289,11 +308,24 @@ const App: React.FC = () => {
         }
     }, [appSettings]);
     
-    // Using a ref for handleCardAction to prevent stale closures in triggerSopStep
-    // FIX: Initialize useRef with null and update the type to allow null to fix the TypeScript error.
+    useEffect(() => {
+        try {
+            localStorage.setItem(KNOWLEDGE_BASE_STORAGE_KEY, knowledgeBase);
+        } catch (error) {
+            console.error("Failed to save knowledge base to localStorage:", error);
+        }
+    }, [knowledgeBase]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(GENERATED_FLASHCARDS_STORAGE_KEY, JSON.stringify(generatedFlashcards));
+        } catch (error) {
+            console.error("Failed to save generated flashcards to localStorage:", error);
+        }
+    }, [generatedFlashcards]);
+    
     const handleCardActionRef = useRef<((action: ActionType, payload?: any) => Promise<void>) | null>(null);
 
-    // Fetch app metadata from JSON file on component mount
     useEffect(() => {
         fetch('./metadata.json')
             .then(response => {
@@ -315,7 +347,6 @@ const App: React.FC = () => {
         scrollToBottom();
     }, [messages]);
 
-     // Handle clicks outside of search to close results
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
@@ -326,7 +357,6 @@ const App: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Handle search filtering
     useEffect(() => {
         if (searchQuery.trim() !== '') {
             const lowerQuery = searchQuery.toLowerCase();
@@ -394,11 +424,9 @@ const App: React.FC = () => {
                     });
                 }
             } else {
-                // This is a terminal step with no action, SOP is complete.
                 showCompletionMessage();
             }
         } else {
-            // This means the SOP is finished.
             showCompletionMessage();
         }
     }, [addMessage]);
@@ -408,7 +436,6 @@ const App: React.FC = () => {
 
         const lowerInput = userInput.toLowerCase().trim();
 
-        // Handle specific commands first
         if (lowerInput === 'help') {
             addMessage({
                 actor: Actor.BOT,
@@ -633,7 +660,7 @@ const App: React.FC = () => {
                     actor: Actor.BOT,
                     content: "I analyzed the document, but couldn't find any new key concepts to create flashcards from."
                 });
-                 setGeneratedFlashcards([]); // Clear any old ones
+                 setGeneratedFlashcards([]);
             }
         } catch (error) {
             console.error("[App] A detailed error occurred while generating flashcards:", error);
@@ -660,16 +687,14 @@ const App: React.FC = () => {
         reader.onload = (e) => {
             const text = e.target?.result as string;
             if (text) {
-                const newKnowledgeContent = '\n\n--- KNOWLEDGE DOCUMENT: ' + file.name + ' ---\n\n' + text;
-                const fullKnowledgeBase = knowledgeBase + newKnowledgeContent;
-                setKnowledgeBase(fullKnowledgeBase);
+                setKnowledgeBase(text);
 
                 addMessage({
                     actor: Actor.BOT,
-                    content: `Successfully added "${file.name}" to the knowledge base. The AI will now use this context.`
+                    content: `Successfully loaded "${file.name}" as the knowledge base. The AI will now use this context.`
                 });
 
-                updateFlashcardsFromKnowledgeBase(fullKnowledgeBase);
+                updateFlashcardsFromKnowledgeBase(text);
             }
         };
         reader.onerror = () => {
@@ -680,10 +705,18 @@ const App: React.FC = () => {
         };
         reader.readAsText(file);
 
-        // Reset file input to allow uploading the same file again
         if (event.target) {
             event.target.value = '';
         }
+    };
+
+    const handleClearKnowledgeBase = () => {
+        setKnowledgeBase('');
+        setGeneratedFlashcards([]);
+        addMessage({
+            actor: Actor.BOT,
+            content: "The custom knowledge base and its generated tips have been cleared."
+        });
     };
 
 
@@ -693,7 +726,6 @@ const App: React.FC = () => {
         const checkAndAdvanceSop = (currentSopContext: any, additionalPayload: object = {}) => {
             if (currentSopContext) {
                 const nextStepContext = { ...currentSopContext, currentStep: currentSopContext.currentStep + 1 };
-                // Pass along any data gathered from the current step, like a selected config
                 const mergedPayload = { ...payload, ...additionalPayload };
                 triggerSopStep(nextStepContext, mergedPayload);
             }
@@ -744,17 +776,15 @@ const App: React.FC = () => {
                 // eslint-disable-next-line no-case-declarations
                 const settings = JSON.parse(payload.jsonString);
 
-                // 1. Create a new Configuration object
                 const newConfig: Configuration = {
-                    projectName: 'Imported Project', // Default name
-                    level: 'Project', // Default level
+                    projectName: 'Imported Project',
+                    level: 'Project',
                     status: 'Active',
                     lastModified: new Date().toISOString().split('T')[0],
                     createdBy: 'importer@example.com',
                     settings: settings
                 };
                 
-                // 2. Dynamically generate a new ConfigTemplate
                 const settingsSchema: ConfigTemplate['settingsSchema'] = {};
                 for (const [key, value] of Object.entries(settings)) {
                     if (typeof value === 'boolean') {
@@ -807,7 +837,6 @@ const App: React.FC = () => {
                     sopType: payload.sopType,
                     sopTitle: payload.sopTitle,
                     currentStep: 1,
-                    // Store any data gathered so far
                     data: {}
                 };
                 triggerSopStep(newSopContext);
@@ -914,19 +943,17 @@ const App: React.FC = () => {
                  addMessage({ actor: Actor.BOT, card: { type: CardType.CONFIG_SELECTOR, payload: { source: 'quickAction' } } });
                 break;
             case ActionType.START_BATCH_TEST:
-                // This action is overloaded: it can be called to show the starter card, or to actually run the test
-                if (payload.path) { // A path means we are running the test
+                if (payload.path) {
                     addMessage({ actor: Actor.USER, content: `Start batch test from: ${payload.path}` });
                     addMessage({ actor: Actor.BOT, content: `Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
                     
-                    // Simulate communication with NiFi UI to highlight the processor
                     if (window.parent !== window) {
                         console.log(`[BOT->NIFI] Posting message to highlight flow for: ${payload.config.projectName}`);
                         window.parent.postMessage({
                             action: 'highlight-flow',
                             configName: payload.config.projectName,
                             vendorId: payload.config.vendorId,
-                        }, '*'); // In production, use a specific target origin
+                        }, '*');
                     }
                     
                     try {
@@ -949,7 +976,7 @@ const App: React.FC = () => {
                         console.error("NiFi Flow Error:", error);
                         addMessage({ actor: Actor.BOT, content: `❌ Error: The NiFi job failed. Reason: ${error}` });
                     }
-                } else { // No path means we need to show the starter card
+                } else {
                     addMessage({ actor: Actor.USER, content: "Run Verification Test" });
                     const config = payload.selectedConfig;
                     if (config) {
@@ -971,14 +998,13 @@ const App: React.FC = () => {
                 updateCardInMessage(payload.messageId, { status: 'submitted' });
                 addMessage({ actor: Actor.BOT, content: `File uploaded. Test submitted to NiFi. The automated flow is running and may take a moment. I will post the results here once the asynchronous job is complete.` });
                 
-                 // Simulate communication with NiFi UI to highlight the processor
                 if (window.parent !== window) {
                     console.log(`[BOT->NIFI] Posting message to highlight flow for: ${payload.config.projectName}`);
                     window.parent.postMessage({
                         action: 'highlight-flow',
                         configName: payload.config.projectName,
                         vendorId: payload.config.vendorId,
-                    }, '*'); // In production, use a specific target origin
+                    }, '*');
                 }
 
                 try {
@@ -1055,7 +1081,7 @@ const App: React.FC = () => {
                 break;
              case ActionType.ROOT_CAUSE_FEEDBACK:
                 addMessage({ actor: Actor.USER, content: `Feedback on root cause: ${payload.isGood ? 'Helpful' : 'Not helpful'}` });
-                 // eslint-disable-next-line no-case-declarations
+                // eslint-disable-next-line no-case-declarations
                 const rootCauseMessage = messages.find(m => m.id === payload.messageId);
                 if (rootCauseMessage) {
                     updateCardInMessage(payload.messageId, { ...rootCauseMessage.card?.payload, feedbackGiven: true });
@@ -1099,9 +1125,9 @@ const App: React.FC = () => {
             case ActionType.UPLOAD_FILE:
                  if (payload && payload.file) {
                     updateCardInMessage(payload.messageId, { status: 'uploading', fileName: payload.file.name });
-                    await new Promise(res => setTimeout(res, 2000)); // Simulate upload
+                    await new Promise(res => setTimeout(res, 2000));
                     updateCardInMessage(payload.messageId, { status: 'processing' });
-                    await new Promise(res => setTimeout(res, 3000)); // Simulate processing
+                    await new Promise(res => setTimeout(res, 3000));
                     updateCardInMessage(payload.messageId, { status: 'complete', result: 'File processed. Standardized 56 rows.' });
                     checkAndAdvanceSop(payload.sopContext);
                  } else {
@@ -1129,7 +1155,7 @@ const App: React.FC = () => {
         }
 
         setIsLoading(false);
-    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, updateFlashcardsFromKnowledgeBase, knowledgeBase, appSettings]);
+    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, appSettings]);
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -1142,8 +1168,8 @@ const App: React.FC = () => {
             const dx = currentX - startX;
             const newWidth = startWidth - dx;
 
-            const minWidth = 384; // 24rem
-            const maxWidth = 896; // 56rem
+            const minWidth = 384;
+            const maxWidth = 896;
             
             if (newWidth >= minWidth && newWidth <= maxWidth) {
                 setPanelWidth(newWidth);
@@ -1369,6 +1395,16 @@ const App: React.FC = () => {
                             >
                                 <PaperclipIcon />
                             </button>
+                            {knowledgeBase && (
+                                <button
+                                    className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                    onClick={handleClearKnowledgeBase}
+                                    title="Clear loaded knowledge base"
+                                    aria-label="Clear loaded knowledge base"
+                                >
+                                    <XCircleIcon className="h-4 w-4" />
+                                </button>
+                            )}
                             <input
                                 type="text"
                                 value={input}
