@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppSettings, GeminiModel } from '../types';
+import { AppSettings, GeminiModel, KnowledgeFile } from '../types';
 import { XCircleIcon } from './Icons';
 
 interface SettingsModalProps {
@@ -7,9 +7,11 @@ interface SettingsModalProps {
   onClose: () => void;
   currentSettings: AppSettings;
   onSave: (newSettings: AppSettings) => void;
+  knowledgeFiles: KnowledgeFile[];
+  onDeleteKnowledgeFile: (fileId: string) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentSettings, onSave }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentSettings, onSave, knowledgeFiles, onDeleteKnowledgeFile }) => {
   const [settings, setSettings] = useState<AppSettings>(currentSettings);
 
   useEffect(() => {
@@ -78,6 +80,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, c
                             placeholder="e.g., /nifi-api/processors/your-id/run"
                         />
                     </div>
+                </div>
+            </section>
+            <section>
+                <h3 className="font-semibold text-gray-800">Knowledge Base Management</h3>
+                <p className="text-sm text-gray-500 mb-3">Manage uploaded Markdown (.md) files used by the AI.</p>
+                <div className="border border-gray-200 rounded-md max-h-48 overflow-y-auto">
+                    {knowledgeFiles.length > 0 ? (
+                        <ul className="divide-y divide-gray-200">
+                            {knowledgeFiles.map(file => (
+                                <li key={file.id} className="p-3 flex justify-between items-center text-sm">
+                                    <span className="text-gray-800 truncate" title={file.name}>{file.name}</span>
+                                    <button 
+                                        onClick={() => onDeleteKnowledgeFile(file.id)}
+                                        className="ml-4 px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                                    >
+                                        Delete
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <div className="p-4 text-center text-sm text-gray-500">
+                            No knowledge files have been uploaded.
+                        </div>
+                    )}
                 </div>
             </section>
             <section>

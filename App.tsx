@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel } from './types';
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel, KnowledgeFile } from './types';
 import { CardRenderer } from './components/CardRenderer';
 import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon, SettingsIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
@@ -237,7 +238,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, version, name,
 
 const APP_VERSION = '1.4';
 const SETTINGS_STORAGE_KEY = 'flowx-sop-bot-settings';
-const KNOWLEDGE_BASE_STORAGE_KEY = 'flowx-sop-bot-knowledge-base';
+const KNOWLEDGE_FILES_STORAGE_KEY = 'flowx-sop-bot-knowledge-files';
 const GENERATED_FLASHCARDS_STORAGE_KEY = 'flowx-sop-bot-generated-flashcards';
 
 const App: React.FC = () => {
@@ -263,12 +264,13 @@ const App: React.FC = () => {
     const [templates, setTemplates] = useState<ConfigTemplate[]>(mockTemplatesData);
     const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
 
-    const [knowledgeBase, setKnowledgeBase] = useState<string>(() => {
+    const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>(() => {
         try {
-            return localStorage.getItem(KNOWLEDGE_BASE_STORAGE_KEY) || '';
+            const savedFiles = localStorage.getItem(KNOWLEDGE_FILES_STORAGE_KEY);
+            return savedFiles ? JSON.parse(savedFiles) : [];
         } catch (error) {
-            console.error("Failed to read knowledge base from localStorage:", error);
-            return '';
+            console.error("Failed to parse knowledge files from localStorage:", error);
+            return [];
         }
     });
 
@@ -310,11 +312,11 @@ const App: React.FC = () => {
     
     useEffect(() => {
         try {
-            localStorage.setItem(KNOWLEDGE_BASE_STORAGE_KEY, knowledgeBase);
+            localStorage.setItem(KNOWLEDGE_FILES_STORAGE_KEY, JSON.stringify(knowledgeFiles));
         } catch (error) {
-            console.error("Failed to save knowledge base to localStorage:", error);
+            console.error("Failed to save knowledge files to localStorage:", error);
         }
-    }, [knowledgeBase]);
+    }, [knowledgeFiles]);
 
     useEffect(() => {
         try {
@@ -325,6 +327,12 @@ const App: React.FC = () => {
     }, [generatedFlashcards]);
     
     const handleCardActionRef = useRef<((action: ActionType, payload?: any) => Promise<void>) | null>(null);
+
+    const knowledgeBaseText = useMemo(() => {
+        if (knowledgeFiles.length === 0) return '';
+        // Add headers to give context to the AI about where each piece of information came from.
+        return knowledgeFiles.map(file => `--- Knowledge from ${file.name} ---\n${file.content}`).join('\n\n');
+    }, [knowledgeFiles]);
 
     useEffect(() => {
         fetch('./metadata.json')
@@ -606,7 +614,7 @@ const App: React.FC = () => {
                 AVAILABLE CONFIGURATIONS: ${JSON.stringify(configs, null, 2)}
                 AVAILABLE BENCHMARKS: ${JSON.stringify(benchmarks, null, 2)}
                 CONVERSATION HISTORY (last 10): ${messages.slice(-10).map(m => `${m.actor === Actor.BOT ? 'BOT' : 'USER'}: ${m.content || '(Interactive Card)'}`).join('\n')}
-                ${knowledgeBase ? `--- \nUSER-PROVIDED KNOWLEDGE BASE:\n${knowledgeBase}` : ''}
+                ${knowledgeBaseText ? `--- \nUSER-PROVIDED KNOWLEDGE BASE:\n${knowledgeBaseText}` : ''}
             `;
 
             const prompt = `
@@ -632,37 +640,38 @@ const App: React.FC = () => {
         }
     };
 
-    const addFlashcardsFromKnowledgeChunk = useCallback(async (newKnowledgeChunk: string) => {
+    const addFlashcardsFromKnowledgeChunk = useCallback(async (newKnowledgeChunk: string, sourceFileId: string, sourceFileName: string) => {
         addMessage({
             actor: Actor.BOT,
-            content: "Analyzing new content to generate additional tips..."
+            content: `Analyzing "${sourceFileName}" to generate new tips...`
         });
         
         try {
-            console.log('[App] Generating flashcards from new knowledge base chunk.');
+            console.log(`[App] Generating flashcards from ${sourceFileName}.`);
             const newCardsData = await generateFlashcardsFromText(newKnowledgeChunk, appSettings.geminiModel);
             const validNewCards = newCardsData.filter(card => card.question && card.answer);
             
             if (validNewCards.length > 0) {
                 const newFlashcardsWithIds = validNewCards.map((card, index) => ({
                     ...card,
-                    id: 100 + Date.now() + index 
+                    id: 100 + Date.now() + index,
+                    sourceFileId: sourceFileId
                 }));
                 
                 setGeneratedFlashcards(prev => [...prev, ...newFlashcardsWithIds]);
 
                 addMessage({
                     actor: Actor.BOT,
-                    content: `I've analyzed the content and added ${newFlashcardsWithIds.length} new flashcards. You can view all tips by clicking 'Tips' or typing 'tips'.`
+                    content: `I've analyzed the content from "${sourceFileName}" and added ${newFlashcardsWithIds.length} new flashcards. You can view all tips by clicking 'Tips' or typing 'tips'.`
                 });
             } else {
                  addMessage({
                     actor: Actor.BOT,
-                    content: "I analyzed the new content, but couldn't find any key concepts to create new flashcards from."
+                    content: `I analyzed "${sourceFileName}", but couldn't find any key concepts to create new flashcards from.`
                 });
             }
         } catch (error) {
-            console.error("[App] A detailed error occurred while generating flashcards:", error);
+            console.error(`[App] A detailed error occurred while generating flashcards from ${sourceFileName}:`, error);
             addMessage({
                 actor: Actor.BOT,
                 content: "Sorry, I had trouble generating new tips from that document. The existing tips are still available."
@@ -670,39 +679,47 @@ const App: React.FC = () => {
         }
     }, [addMessage, appSettings.geminiModel]);
 
-    const handleKnowledgeFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
+    const handleKnowledgeFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
 
-        if (file.type !== 'text/markdown' && !file.name.endsWith('.md')) {
-            addMessage({
-                actor: Actor.BOT,
-                content: "Sorry, I can only accept Markdown (.md) files for the knowledge base at this time."
+        // FIX: Explicitly type `file` as `File` to resolve TypeScript errors where it was inferred as `unknown`.
+        const fileReadPromises = Array.from(files).map((file: File) => {
+            return new Promise<{ file: File, content: string } | { file: File, error: string }>((resolve) => {
+                if (!file.type.startsWith('text/') && !file.name.endsWith('.md')) {
+                    resolve({ file, error: `Skipping "${file.name}": Only Markdown (.md) or text files are accepted.` });
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => resolve({ file, content: e.target?.result as string });
+                reader.onerror = () => resolve({ file, error: `Error reading "${file.name}".` });
+                reader.readAsText(file);
             });
-            return;
-        }
+        });
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target?.result as string;
-            if (text) {
-                setKnowledgeBase(prev => prev ? `${prev}\n\n---\n\n${text}` : text);
+        const results = await Promise.all(fileReadPromises);
 
-                addMessage({
-                    actor: Actor.BOT,
-                    content: `Successfully appended content from "${file.name}" to the knowledge base. The AI will now use this combined context.`
-                });
+        const newFiles: KnowledgeFile[] = [];
+        const newKnowledgeChunks: { content: string, fileId: string, fileName: string }[] = [];
 
-                addFlashcardsFromKnowledgeChunk(text);
+        results.forEach(result => {
+            if ('error' in result) {
+                addMessage({ actor: Actor.BOT, content: result.error });
+            } else if (result.content) {
+                const fileId = `${result.file.name}-${Date.now()}`;
+                newFiles.push({ id: fileId, name: result.file.name, content: result.content });
+                newKnowledgeChunks.push({ content: result.content, fileId: fileId, fileName: result.file.name });
             }
-        };
-        reader.onerror = () => {
-             addMessage({
-                actor: Actor.BOT,
-                content: `There was an error reading the file "${file.name}". Please try again.`
+        });
+
+        if (newFiles.length > 0) {
+            setKnowledgeFiles(prev => [...prev, ...newFiles]);
+            addMessage({ actor: Actor.BOT, content: `Successfully loaded content from ${newFiles.length} file(s) into the knowledge base.` });
+            
+            newKnowledgeChunks.forEach(chunk => {
+                addFlashcardsFromKnowledgeChunk(chunk.content, chunk.fileId, chunk.fileName);
             });
-        };
-        reader.readAsText(file);
+        }
 
         if (event.target) {
             event.target.value = '';
@@ -710,11 +727,24 @@ const App: React.FC = () => {
     };
 
     const handleClearKnowledgeBase = () => {
-        setKnowledgeBase('');
+        setKnowledgeFiles([]);
         setGeneratedFlashcards([]);
         addMessage({
             actor: Actor.BOT,
             content: "The custom knowledge base and its generated tips have been cleared."
+        });
+    };
+
+    const handleDeleteKnowledgeFile = (fileIdToDelete: string) => {
+        const fileToDelete = knowledgeFiles.find(f => f.id === fileIdToDelete);
+        if (!fileToDelete) return;
+
+        setKnowledgeFiles(prev => prev.filter(f => f.id !== fileIdToDelete));
+        setGeneratedFlashcards(prev => prev.filter(card => card.sourceFileId !== fileIdToDelete));
+        
+        addMessage({
+            actor: Actor.BOT,
+            content: `Knowledge file "${fileToDelete.name}" and its associated tips have been removed.`
         });
     };
 
@@ -1247,6 +1277,8 @@ const App: React.FC = () => {
                         setIsSettingsModalOpen(false);
                         addMessage({ actor: Actor.BOT, content: "Settings have been updated." });
                     }}
+                    knowledgeFiles={knowledgeFiles}
+                    onDeleteKnowledgeFile={handleDeleteKnowledgeFile}
                 />
                 {appMetadata && (
                     <AboutModal
@@ -1385,21 +1417,22 @@ const App: React.FC = () => {
                                 onChange={handleKnowledgeFileChange}
                                 className="hidden"
                                 accept=".md,text/markdown"
+                                multiple
                             />
                             <button 
                                 className="p-2 text-gray-500 hover:text-gray-800 transition-colors"
                                 onClick={() => knowledgeFileInputRef.current?.click()}
-                                title="Upload Knowledge Document (.md)"
-                                aria-label="Upload Knowledge Document"
+                                title="Upload Knowledge Document(s) (.md)"
+                                aria-label="Upload Knowledge Document(s)"
                             >
                                 <PaperclipIcon />
                             </button>
-                            {knowledgeBase && (
+                            {knowledgeFiles.length > 0 && (
                                 <button
                                     className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                                     onClick={handleClearKnowledgeBase}
-                                    title="Clear loaded knowledge base"
-                                    aria-label="Clear loaded knowledge base"
+                                    title="Clear all loaded knowledge files"
+                                    aria-label="Clear all loaded knowledge files"
                                 >
                                     <XCircleIcon className="h-4 w-4" />
                                 </button>

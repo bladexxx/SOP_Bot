@@ -112,6 +112,13 @@ export interface Flashcard {
     id: number;
     question: string;
     answer: string;
+    sourceFileId?: string;
+}
+
+export interface KnowledgeFile {
+  id: string;
+  name: string;
+  content: string;
 }
 
 export type GeminiModel = 'gemini-2.0-flash' | 'gemini-2.5-flash' | 'gemini-2.5-pro';

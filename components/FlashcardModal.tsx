@@ -12,15 +12,27 @@ export const FlashcardModal: React.FC<FlashcardModalProps> = ({ isOpen, onClose,
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
 
-  // Reset state when modal is opened or cards change
+  // This effect is now more robust. It resets the view to the first card
+  // not only when the modal is opened, but also if the underlying list of
+  // cards changes. This is key to preventing state inconsistencies.
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(0);
       setIsFlipped(false);
     }
-  }, [isOpen]);
+  }, [isOpen, cards]); // CORRECTED: Add `cards` to the dependency array.
 
+  // If the modal isn't open or there are no cards, render nothing.
   if (!isOpen || cards.length === 0) return null;
+
+  // CRITICAL FIX: This guard prevents a crash. If the component's state
+  // (`currentIndex`) is out of sync with its props (`cards`), which can happen
+  // on the first render after `cards` has shrunk, we must not proceed.
+  // The `useEffect` above has already been queued to fix the state for the
+  // subsequent re-render. By returning null here, we avoid the crash.
+  if (currentIndex >= cards.length) {
+    return null;
+  }
 
   const handleNext = () => {
     setIsFlipped(false);
