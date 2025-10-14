@@ -632,15 +632,15 @@ const App: React.FC = () => {
         }
     };
 
-    const updateFlashcardsFromKnowledgeBase = useCallback(async (newKnowledge: string) => {
+    const addFlashcardsFromKnowledgeChunk = useCallback(async (newKnowledgeChunk: string) => {
         addMessage({
             actor: Actor.BOT,
-            content: "Analyzing document to generate new tips..."
+            content: "Analyzing new content to generate additional tips..."
         });
         
         try {
-            console.log('[App] Generating flashcards with knowledge base text.');
-            const newCardsData = await generateFlashcardsFromText(newKnowledge, appSettings.geminiModel);
+            console.log('[App] Generating flashcards from new knowledge base chunk.');
+            const newCardsData = await generateFlashcardsFromText(newKnowledgeChunk, appSettings.geminiModel);
             const validNewCards = newCardsData.filter(card => card.question && card.answer);
             
             if (validNewCards.length > 0) {
@@ -649,24 +649,23 @@ const App: React.FC = () => {
                     id: 100 + Date.now() + index 
                 }));
                 
-                setGeneratedFlashcards(newFlashcardsWithIds);
+                setGeneratedFlashcards(prev => [...prev, ...newFlashcardsWithIds]);
 
                 addMessage({
                     actor: Actor.BOT,
-                    content: `I've analyzed the document and generated ${newFlashcardsWithIds.length} new flashcards for you. You can view them by clicking 'Tips' or typing 'tips'.`
+                    content: `I've analyzed the content and added ${newFlashcardsWithIds.length} new flashcards. You can view all tips by clicking 'Tips' or typing 'tips'.`
                 });
             } else {
                  addMessage({
                     actor: Actor.BOT,
-                    content: "I analyzed the document, but couldn't find any new key concepts to create flashcards from."
+                    content: "I analyzed the new content, but couldn't find any key concepts to create new flashcards from."
                 });
-                 setGeneratedFlashcards([]);
             }
         } catch (error) {
             console.error("[App] A detailed error occurred while generating flashcards:", error);
             addMessage({
                 actor: Actor.BOT,
-                content: "Sorry, I had trouble generating new tips from that document. The default tips are still available."
+                content: "Sorry, I had trouble generating new tips from that document. The existing tips are still available."
             });
         }
     }, [addMessage, appSettings.geminiModel]);
@@ -687,14 +686,14 @@ const App: React.FC = () => {
         reader.onload = (e) => {
             const text = e.target?.result as string;
             if (text) {
-                setKnowledgeBase(text);
+                setKnowledgeBase(prev => prev ? `${prev}\n\n---\n\n${text}` : text);
 
                 addMessage({
                     actor: Actor.BOT,
-                    content: `Successfully loaded "${file.name}" as the knowledge base. The AI will now use this context.`
+                    content: `Successfully appended content from "${file.name}" to the knowledge base. The AI will now use this combined context.`
                 });
 
-                updateFlashcardsFromKnowledgeBase(text);
+                addFlashcardsFromKnowledgeChunk(text);
             }
         };
         reader.onerror = () => {
