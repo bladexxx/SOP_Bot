@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel, KnowledgeFile } from './types';
 import { CardRenderer } from './components/CardRenderer';
-import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon, SettingsIcon } from './components/Icons';
+import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon, SettingsIcon, LightBulbIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
 import { DemoGuideModal } from './components/DemoGuideModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -1336,7 +1337,7 @@ const App: React.FC = () => {
                                 aria-label="Show tips and commands"
                                 title="Show tips and commands"
                             >
-                                <SparklesIcon />
+                                <LightBulbIcon className="h-6 w-6" />
                             </button>
                              <button
                                 onClick={() => setIsAboutModalOpen(true)}
