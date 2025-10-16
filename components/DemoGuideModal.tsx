@@ -137,7 +137,8 @@ interface DemoGuideModalProps {
 
 export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [isPlaying, setIsPlaying] = useState(true);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [narrationInitiated, setNarrationInitiated] = useState(false);
     const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
     const speak = (text: string) => {
@@ -145,12 +146,10 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             console.warn("Browser does not support Speech Synthesis.");
             return;
         }
-        // Cancel any previous speech
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
         
-        // Try to find a good English voice
         const voices = window.speechSynthesis.getVoices();
         const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google') && !voice.name.includes('Male')) || voices.find(voice => voice.lang.startsWith('en-'));
         if (englishVoice) {
@@ -158,7 +157,10 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         }
         
         utterance.onend = () => setIsPlaying(false);
-        utterance.onerror = () => setIsPlaying(false);
+        utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
+            console.error(`SpeechSynthesis Error: ${e.error}`, e);
+            setIsPlaying(false);
+        };
 
         utteranceRef.current = utterance;
         window.speechSynthesis.speak(utterance);
@@ -166,39 +168,16 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     };
 
     useEffect(() => {
-        if (isOpen) {
-            // Speech synthesis voices may load asynchronously
-            const handleVoicesChanged = () => {
-                speak(slides[currentIndex].narration);
-            };
-            window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
-            handleVoicesChanged(); // Call it once in case voices are already loaded
-        } else {
+        if (!isOpen) {
             window.speechSynthesis.cancel();
             setIsPlaying(false);
+            setCurrentIndex(0);
+            setNarrationInitiated(false);
         }
-
-        // Cleanup
-        return () => {
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.onvoiceschanged = null;
-        };
     }, [isOpen]);
 
     useEffect(() => {
-        if (isOpen) {
-             // Reset to first slide and play when modal opens
-            if (currentIndex !== 0) {
-                setCurrentIndex(0);
-            } else {
-                speak(slides[0].narration);
-            }
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen]);
-
-     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && narrationInitiated) {
              speak(slides[currentIndex].narration);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,6 +195,12 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     };
 
     const handlePlayPause = () => {
+        if (!narrationInitiated) {
+            setNarrationInitiated(true);
+            speak(slides[currentIndex].narration);
+            return;
+        }
+
         if (window.speechSynthesis.speaking) {
             if (isPlaying) {
                 window.speechSynthesis.pause();
@@ -225,7 +210,6 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
                 setIsPlaying(true);
             }
         } else {
-            // If speech ended or never started, play it again
             speak(slides[currentIndex].narration);
         }
     };
