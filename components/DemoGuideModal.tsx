@@ -139,21 +139,21 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-    const wasPlayingRef = useRef(false);
+    const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-    // Effect to reset state and clean up when the modal is closed.
+    const stopSpeaking = useCallback(() => {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+    }, []);
+
     useEffect(() => {
         if (!isOpen) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-            }
-            setIsPlaying(false);
-            wasPlayingRef.current = false;
+            stopSpeaking();
             setCurrentIndex(0);
         }
-    }, [isOpen]);
+    }, [isOpen, stopSpeaking]);
 
-    // Effect to load available speech synthesis voices from the browser.
     useEffect(() => {
         if (!isOpen || !('speechSynthesis' in window)) return;
 
@@ -166,82 +166,83 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         };
 
         loadVoices();
-        window.speechSynthesis.onvoiceschanged = loadVoices;
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
 
         return () => {
             window.speechSynthesis.onvoiceschanged = null;
+            stopSpeaking();
         };
-    }, [isOpen]);
+    }, [isOpen, stopSpeaking]);
 
-    // The core speech synthesis function.
     const speak = useCallback((text: string) => {
         if (!('speechSynthesis' in window) || voices.length === 0) {
             console.warn("[DemoGuide] Speech Synthesis not ready or no voices available.");
             return;
         }
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google')) || voices.find(voice => voice.lang.startsWith('en-'));
-        
-        if (englishVoice) {
-            utterance.voice = englishVoice;
-            console.log(`[DemoGuide] Using voice: ${englishVoice.name} (${englishVoice.lang})`);
-        } else {
-            console.warn("[DemoGuide] No suitable English voice found, using browser default.");
-        }
-        
-        utterance.onstart = () => {
-            console.log("[DemoGuide] onstart event fired. Setting isPlaying to true.");
-            setIsPlaying(true);
-        };
-        
-        utterance.onend = () => {
-            console.log("[DemoGuide] onend event fired. Setting isPlaying to false.");
-            setIsPlaying(false);
-            wasPlayingRef.current = false;
-        };
-        
-        utterance.onerror = (e) => {
-            console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
-            setIsPlaying(false);
-            wasPlayingRef.current = false;
-        };
+        stopSpeaking();
 
-        console.log(`[DemoGuide] Attempting to speak text: "${text.substring(0, 50)}..."`);
-        window.speechSynthesis.speak(utterance);
-    }, [voices]);
+        const timerId = setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utteranceRef.current = utterance;
+
+            const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google')) || voices.find(voice => voice.lang.startsWith('en-'));
+            
+            if (englishVoice) {
+                utterance.voice = englishVoice;
+                console.log(`[DemoGuide] Using voice: ${englishVoice.name} (${englishVoice.lang})`);
+            } else {
+                console.warn("[DemoGuide] No suitable English voice found, using browser default.");
+            }
+            
+            utterance.onstart = () => {
+                console.log("[DemoGuide] Speech started.");
+                setIsPlaying(true);
+            };
+            
+            utterance.onend = () => {
+                console.log("[DemoGuide] Speech ended.");
+                setIsPlaying(false);
+                utteranceRef.current = null;
+            };
+            
+            utterance.onerror = (e) => {
+                console.error(`[DemoGuide] SpeechSynthesis Error occurred: ${e.error}`, e);
+                setIsPlaying(false);
+                utteranceRef.current = null;
+            };
+
+            console.log(`[DemoGuide] Queuing speech: "${text.substring(0, 50)}..."`);
+            window.speechSynthesis.speak(utterance);
+        }, 100);
+
+        return () => clearTimeout(timerId);
+    }, [voices, stopSpeaking]);
     
-    // This effect handles auto-playing the narration for a new slide if it was playing on the previous one.
     useEffect(() => {
-        if (isOpen && wasPlayingRef.current) {
-            speak(slides[currentIndex].narration);
-        }
-    }, [currentIndex, isOpen, speak]);
-    
+        stopSpeaking();
+    }, [currentIndex, stopSpeaking]);
+
     if (!isOpen) return null;
 
     const handleNext = () => {
-        wasPlayingRef.current = isPlaying; // Remember if it was playing *before* the change
-        window.speechSynthesis.cancel();
         setCurrentIndex((prevIndex) => (prevIndex + 1) % slides.length);
     };
 
     const handlePrev = () => {
-        wasPlayingRef.current = isPlaying; // Remember if it was playing *before* the change
-        window.speechSynthesis.cancel();
         setCurrentIndex((prevIndex) => (prevIndex - 1 + slides.length) % slides.length);
     };
-    
+
     const handlePlayPause = () => {
         if (isPlaying) {
-            wasPlayingRef.current = false;
-            window.speechSynthesis.cancel(); // The onend handler will set isPlaying to false.
+            stopSpeaking();
         } else {
-            wasPlayingRef.current = true;
             speak(slides[currentIndex].narration);
         }
     };
-
+    
     const currentSlide = slides[currentIndex];
 
     return (
