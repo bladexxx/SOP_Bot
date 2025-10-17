@@ -124,9 +124,9 @@ const WelcomeCard: React.FC<{ onAction: CardRendererProps['onAction'] }> = ({ on
                    {showQuickActions ? 'Hide' : 'Show'} Quick Actions
                 </summary>
                 <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200">
-                    <CardButton onClick={() => onAction(ActionType.START_CONFIG)} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm text-xs">New Config</CardButton>
-                    <CardButton onClick={() => onAction(ActionType.START_TEST)} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm text-xs">Run Test</CardButton>
-                    <CardButton onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD)} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm text-xs col-span-2">Add Golden Benchmark</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.START_CONFIG)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs">New Config</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.START_TEST)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs">Run Test</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs col-span-2">Add Golden Benchmark</CardButton>
                 </div>
             </details>
         </div>
