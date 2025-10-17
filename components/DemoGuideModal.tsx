@@ -154,20 +154,12 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         };
 
         loadVoices();
+        // In some browsers, getVoices is async and needs this event.
         window.speechSynthesis.onvoiceschanged = loadVoices;
-
-        // Workaround for a known Chrome bug where speech can stop working.
-        // Periodically calling resume keeps the synthesis engine "warm".
-        const keepAliveInterval = setInterval(() => {
-            if (window.speechSynthesis.paused) {
-                window.speechSynthesis.resume();
-            }
-        }, 5000);
 
         return () => {
             window.speechSynthesis.onvoiceschanged = null;
-            clearInterval(keepAliveInterval);
-            // Ensure speech is stopped and cleanup happens when modal closes
+            // Ensure speech is stopped and cleanup happens when modal closes or component unmounts
             window.speechSynthesis.cancel();
         };
     }, [isOpen]);
@@ -177,48 +169,41 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             console.warn("[DemoGuide] Browser does not support Speech Synthesis.");
             return;
         }
-        // ALWAYS cancel previous speech before starting new. This prevents queueing issues.
-        console.log("[DemoGuide] Cancelling any existing speech.");
-        window.speechSynthesis.cancel();
-
+        
         const utterance = new SpeechSynthesisUtterance(text);
-        
-        if (voices.length === 0) {
-            console.warn("[DemoGuide] Speech synthesis voices not loaded yet. Narration may use a default voice or fail.");
-        }
-
-        // Prefer a high-quality Google voice if available
-        const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google') && !voice.name.includes('Male')) || voices.find(voice => voice.lang.startsWith('en-'));
-        
+        const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google')) || voices.find(voice => voice.lang.startsWith('en-'));
         if (englishVoice) {
             utterance.voice = englishVoice;
-            console.log(`[DemoGuide] Using voice: ${englishVoice.name} (${englishVoice.lang})`);
+            console.log(`[DemoGuide] Selected voice: ${englishVoice.name}`);
         } else {
-            console.warn("[DemoGuide] No suitable English voice found. The browser will use its default voice.");
+            console.warn("[DemoGuide] No suitable English voice found, using browser default.");
         }
         
         utterance.onstart = () => {
-            console.log("[DemoGuide] Speech started.");
+            console.log("[DemoGuide] Speech playback started.");
             setIsPlaying(true);
         };
         utterance.onend = () => {
-            console.log("[DemoGuide] Speech ended.");
+            console.log("[DemoGuide] Speech playback finished.");
             setIsPlaying(false);
         };
         utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
-            console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
+            console.error(`[DemoGuide] SpeechSynthesis Error occurred: ${e.error}`, e);
             setIsPlaying(false);
         };
         
         utteranceRef.current = utterance;
-        
-        // A tiny delay can help with race conditions in some browser engines
+
+        // Defensive approach: always cancel any pending speech, then wait a moment
+        // before speaking. This prevents the "interrupted" error.
+        window.speechSynthesis.cancel();
         setTimeout(() => {
-            console.log("[DemoGuide] Attempting to speak text:", `"${text}"`);
+            console.log('[DemoGuide] Issuing speak command now.');
             window.speechSynthesis.speak(utterance);
-        }, 50);
+        }, 250); // A safer, longer delay
 
     }, [voices]);
+
 
     // Cleanup and reset state when the modal is closed
     useEffect(() => {
@@ -226,6 +211,10 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             setIsPlaying(false);
             setCurrentIndex(0);
             setNarrationInitiated(false);
+            // Explicitly cancel here too, just in case.
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
         }
     }, [isOpen]);
 
@@ -233,11 +222,13 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     useEffect(() => {
         if (isOpen && narrationInitiated) {
              speak(slides[currentIndex].narration);
+        } else if ('speechSynthesis' in window) {
+             // If narration hasn't been started, make sure nothing is playing from a previous state
+             window.speechSynthesis.cancel();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex]);
+    }, [currentIndex, isOpen, narrationInitiated, speak]);
     
-
     if (!isOpen) return null;
 
     const handleNext = () => {
@@ -248,11 +239,12 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         setCurrentIndex((prevIndex) => (prevIndex - 1 + slides.length) % slides.length);
     };
     
-    // This function now acts as a more reliable play/stop toggle
     const handlePlayPause = () => {
         if (isPlaying) {
-            window.speechSynthesis.cancel(); // This will trigger onend, which sets isPlaying to false
+            console.log('[DemoGuide] User clicked stop. Cancelling speech.');
+            window.speechSynthesis.cancel(); // Handlers will set isPlaying to false.
         } else {
+            console.log('[DemoGuide] User clicked play.');
             if (!narrationInitiated) {
                 setNarrationInitiated(true);
             }
