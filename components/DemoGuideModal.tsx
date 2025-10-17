@@ -138,26 +138,24 @@ interface DemoGuideModalProps {
 export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [narrationInitiated, setNarrationInitiated] = useState(false);
     const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-    const isClosingRef = useRef(false);
+    const wasPlayingRef = useRef(false);
 
+    // Effect to reset state and clean up when the modal is closed.
     useEffect(() => {
         if (!isOpen) {
-            isClosingRef.current = true;
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
             }
             setIsPlaying(false);
+            wasPlayingRef.current = false;
             setCurrentIndex(0);
-            setNarrationInitiated(false);
-        } else {
-            isClosingRef.current = false;
         }
     }, [isOpen]);
 
+    // Effect to load available speech synthesis voices from the browser.
     useEffect(() => {
-        if (!('speechSynthesis' in window)) return;
+        if (!isOpen || !('speechSynthesis' in window)) return;
 
         const loadVoices = () => {
             const availableVoices = window.speechSynthesis.getVoices();
@@ -173,16 +171,12 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         return () => {
             window.speechSynthesis.onvoiceschanged = null;
         };
-    }, []);
+    }, [isOpen]);
 
+    // The core speech synthesis function.
     const speak = useCallback((text: string) => {
         if (!('speechSynthesis' in window) || voices.length === 0) {
             console.warn("[DemoGuide] Speech Synthesis not ready or no voices available.");
-            return;
-        }
-        
-        if (isClosingRef.current) {
-            console.log("[DemoGuide] Speak call aborted because modal is closing.");
             return;
         }
 
@@ -196,60 +190,55 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             console.warn("[DemoGuide] No suitable English voice found, using browser default.");
         }
         
-        utterance.onstart = () => setIsPlaying(true);
+        utterance.onstart = () => {
+            console.log("[DemoGuide] onstart event fired. Setting isPlaying to true.");
+            setIsPlaying(true);
+        };
         
         utterance.onend = () => {
-             console.log("[DemoGuide] Speech playback finished naturally.");
-             setIsPlaying(false);
+            console.log("[DemoGuide] onend event fired. Setting isPlaying to false.");
+            setIsPlaying(false);
+            wasPlayingRef.current = false;
         };
         
         utterance.onerror = (e) => {
-            if (e.error !== 'interrupted' && e.error !== 'canceled') {
-                console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
-            } else {
-                console.log(`[DemoGuide] Speech playback was interrupted or canceled, which is expected when pausing or changing slides.`);
-            }
+            console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
             setIsPlaying(false);
+            wasPlayingRef.current = false;
         };
-        
-        window.speechSynthesis.cancel();
-        setTimeout(() => {
-            if (!isClosingRef.current) {
-                console.log(`[DemoGuide] Attempting to speak text: "${text.substring(0, 50)}..."`);
-                window.speechSynthesis.speak(utterance);
-            }
-        }, 100);
 
+        console.log(`[DemoGuide] Attempting to speak text: "${text.substring(0, 50)}..."`);
+        window.speechSynthesis.speak(utterance);
     }, [voices]);
-
+    
+    // This effect handles auto-playing the narration for a new slide if it was playing on the previous one.
     useEffect(() => {
-        if (isOpen && narrationInitiated) {
+        if (isOpen && wasPlayingRef.current) {
             speak(slides[currentIndex].narration);
         }
-    }, [currentIndex, narrationInitiated, isOpen, speak]);
+    }, [currentIndex, isOpen, speak]);
     
     if (!isOpen) return null;
 
     const handleNext = () => {
+        wasPlayingRef.current = isPlaying; // Remember if it was playing *before* the change
+        window.speechSynthesis.cancel();
         setCurrentIndex((prevIndex) => (prevIndex + 1) % slides.length);
     };
 
     const handlePrev = () => {
+        wasPlayingRef.current = isPlaying; // Remember if it was playing *before* the change
+        window.speechSynthesis.cancel();
         setCurrentIndex((prevIndex) => (prevIndex - 1 + slides.length) % slides.length);
     };
     
     const handlePlayPause = () => {
         if (isPlaying) {
-            console.log('[DemoGuide] User clicked pause. Cancelling speech.');
-            window.speechSynthesis.cancel();
+            wasPlayingRef.current = false;
+            window.speechSynthesis.cancel(); // The onend handler will set isPlaying to false.
         } else {
-            if (!narrationInitiated) {
-                console.log('[DemoGuide] Narration initiated by user.');
-                setNarrationInitiated(true);
-            } else {
-                console.log('[DemoGuide] Resuming narration.');
-                speak(slides[currentIndex].narration);
-            }
+            wasPlayingRef.current = true;
+            speak(slides[currentIndex].narration);
         }
     };
 
