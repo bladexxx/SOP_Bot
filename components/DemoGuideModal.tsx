@@ -143,7 +143,7 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
 
     const speak = (text: string) => {
         if (!('speechSynthesis' in window)) {
-            console.warn("Browser does not support Speech Synthesis.");
+            console.log("Browser does not support Speech Synthesis.");
             return;
         }
         window.speechSynthesis.cancel();
