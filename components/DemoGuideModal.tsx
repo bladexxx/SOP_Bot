@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon } from './Icons';
 
 const slides = [
@@ -140,32 +140,58 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     const [isPlaying, setIsPlaying] = useState(false);
     const [narrationInitiated, setNarrationInitiated] = useState(false);
     const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+    const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-    const speak = (text: string) => {
+    useEffect(() => {
+        if (!isOpen || !('speechSynthesis' in window)) return;
+
+        const loadVoices = () => {
+            const availableVoices = window.speechSynthesis.getVoices();
+            if (availableVoices.length > 0) {
+                setVoices(availableVoices);
+            }
+        };
+
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        return () => {
+            window.speechSynthesis.onvoiceschanged = null;
+        };
+    }, [isOpen]);
+
+    const speak = useCallback((text: string) => {
         if (!('speechSynthesis' in window)) {
-            console.log("Browser does not support Speech Synthesis.");
+            console.warn("Browser does not support Speech Synthesis.");
             return;
         }
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
         
-        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+            console.warn("[DemoGuide] Speech synthesis voices not loaded yet. Narration may use a default voice or fail.");
+        }
+
         const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google') && !voice.name.includes('Male')) || voices.find(voice => voice.lang.startsWith('en-'));
+        
         if (englishVoice) {
             utterance.voice = englishVoice;
+            console.log(`[DemoGuide] Using voice: ${englishVoice.name}`);
+        } else {
+            console.warn("[DemoGuide] No suitable English voice found. The browser will use its default voice, which may not be English.");
         }
-        console.log("go 1");
+        
         utterance.onend = () => setIsPlaying(false);
         utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
-            console.error(`SpeechSynthesis Error: ${e.error}`, e);
+            console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
             setIsPlaying(false);
         };
-        console.log("go 2");
+        
         utteranceRef.current = utterance;
         window.speechSynthesis.speak(utterance);
         setIsPlaying(true);
-    };
+    }, [voices]);
 
     useEffect(() => {
         if (!isOpen) {
@@ -181,7 +207,7 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
              speak(slides[currentIndex].narration);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex]);
+    }, [currentIndex, speak]);
     
 
     if (!isOpen) return null;
