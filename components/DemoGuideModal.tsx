@@ -139,11 +139,25 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [narrationInitiated, setNarrationInitiated] = useState(false);
-    const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
     const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+    const isClosingRef = useRef(false);
 
     useEffect(() => {
-        if (!isOpen || !('speechSynthesis' in window)) return;
+        if (!isOpen) {
+            isClosingRef.current = true;
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+            setIsPlaying(false);
+            setCurrentIndex(0);
+            setNarrationInitiated(false);
+        } else {
+            isClosingRef.current = false;
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!('speechSynthesis' in window)) return;
 
         const loadVoices = () => {
             const availableVoices = window.speechSynthesis.getVoices();
@@ -154,80 +168,65 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         };
 
         loadVoices();
-        // In some browsers, getVoices is async and needs this event.
         window.speechSynthesis.onvoiceschanged = loadVoices;
 
         return () => {
             window.speechSynthesis.onvoiceschanged = null;
-            // Ensure speech is stopped and cleanup happens when modal closes or component unmounts
-            window.speechSynthesis.cancel();
         };
-    }, [isOpen]);
+    }, []);
 
     const speak = useCallback((text: string) => {
-        if (!('speechSynthesis' in window)) {
-            console.warn("[DemoGuide] Browser does not support Speech Synthesis.");
+        if (!('speechSynthesis' in window) || voices.length === 0) {
+            console.warn("[DemoGuide] Speech Synthesis not ready or no voices available.");
             return;
         }
         
+        if (isClosingRef.current) {
+            console.log("[DemoGuide] Speak call aborted because modal is closing.");
+            return;
+        }
+
         const utterance = new SpeechSynthesisUtterance(text);
         const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google')) || voices.find(voice => voice.lang.startsWith('en-'));
+        
         if (englishVoice) {
             utterance.voice = englishVoice;
-            console.log(`[DemoGuide] Selected voice: ${englishVoice.name}`);
+            console.log(`[DemoGuide] Using voice: ${englishVoice.name} (${englishVoice.lang})`);
         } else {
             console.warn("[DemoGuide] No suitable English voice found, using browser default.");
         }
         
-        utterance.onstart = () => {
-            console.log("[DemoGuide] Speech playback started.");
-            setIsPlaying(true);
-        };
+        utterance.onstart = () => setIsPlaying(true);
+        
         utterance.onend = () => {
-            console.log("[DemoGuide] Speech playback finished.");
-            setIsPlaying(false);
+             console.log("[DemoGuide] Speech playback finished naturally.");
+             setIsPlaying(false);
         };
-        utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
-            console.error(`[DemoGuide] SpeechSynthesis Error occurred: ${e.error}`, e);
+        
+        utterance.onerror = (e) => {
+            if (e.error !== 'interrupted' && e.error !== 'canceled') {
+                console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
+            } else {
+                console.log(`[DemoGuide] Speech playback was interrupted or canceled, which is expected when pausing or changing slides.`);
+            }
             setIsPlaying(false);
         };
         
-        utteranceRef.current = utterance;
-
-        // Defensive approach: always cancel any pending speech, then wait a moment
-        // before speaking. This prevents the "interrupted" error.
         window.speechSynthesis.cancel();
         setTimeout(() => {
-            console.log('[DemoGuide] Issuing speak command now.');
-            window.speechSynthesis.speak(utterance);
-        }, 250); // A safer, longer delay
+            if (!isClosingRef.current) {
+                console.log(`[DemoGuide] Attempting to speak text: "${text.substring(0, 50)}..."`);
+                window.speechSynthesis.speak(utterance);
+            }
+        }, 100);
 
     }, [voices]);
 
-
-    // Cleanup and reset state when the modal is closed
-    useEffect(() => {
-        if (!isOpen) {
-            setIsPlaying(false);
-            setCurrentIndex(0);
-            setNarrationInitiated(false);
-            // Explicitly cancel here too, just in case.
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-            }
-        }
-    }, [isOpen]);
-
-    // Auto-play narration when the slide changes, but only if the user has started it
     useEffect(() => {
         if (isOpen && narrationInitiated) {
-             speak(slides[currentIndex].narration);
-        } else if ('speechSynthesis' in window) {
-             // If narration hasn't been started, make sure nothing is playing from a previous state
-             window.speechSynthesis.cancel();
+            speak(slides[currentIndex].narration);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex, isOpen, narrationInitiated, speak]);
+    }, [currentIndex, narrationInitiated, isOpen, speak]);
     
     if (!isOpen) return null;
 
@@ -241,14 +240,16 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     
     const handlePlayPause = () => {
         if (isPlaying) {
-            console.log('[DemoGuide] User clicked stop. Cancelling speech.');
-            window.speechSynthesis.cancel(); // Handlers will set isPlaying to false.
+            console.log('[DemoGuide] User clicked pause. Cancelling speech.');
+            window.speechSynthesis.cancel();
         } else {
-            console.log('[DemoGuide] User clicked play.');
             if (!narrationInitiated) {
+                console.log('[DemoGuide] Narration initiated by user.');
                 setNarrationInitiated(true);
+            } else {
+                console.log('[DemoGuide] Resuming narration.');
+                speak(slides[currentIndex].narration);
             }
-            speak(slides[currentIndex].narration);
         }
     };
 
