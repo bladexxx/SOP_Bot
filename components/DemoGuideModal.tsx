@@ -149,22 +149,36 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             const availableVoices = window.speechSynthesis.getVoices();
             if (availableVoices.length > 0) {
                 setVoices(availableVoices);
+                console.log(`[DemoGuide] ${availableVoices.length} speech synthesis voices loaded.`);
             }
         };
 
         loadVoices();
         window.speechSynthesis.onvoiceschanged = loadVoices;
 
+        // Workaround for a known Chrome bug where speech can stop working.
+        // Periodically calling resume keeps the synthesis engine "warm".
+        const keepAliveInterval = setInterval(() => {
+            if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            }
+        }, 5000);
+
         return () => {
             window.speechSynthesis.onvoiceschanged = null;
+            clearInterval(keepAliveInterval);
+            // Ensure speech is stopped and cleanup happens when modal closes
+            window.speechSynthesis.cancel();
         };
     }, [isOpen]);
 
     const speak = useCallback((text: string) => {
         if (!('speechSynthesis' in window)) {
-            console.warn("Browser does not support Speech Synthesis.");
+            console.warn("[DemoGuide] Browser does not support Speech Synthesis.");
             return;
         }
+        // ALWAYS cancel previous speech before starting new. This prevents queueing issues.
+        console.log("[DemoGuide] Cancelling any existing speech.");
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
@@ -173,41 +187,55 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             console.warn("[DemoGuide] Speech synthesis voices not loaded yet. Narration may use a default voice or fail.");
         }
 
+        // Prefer a high-quality Google voice if available
         const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google') && !voice.name.includes('Male')) || voices.find(voice => voice.lang.startsWith('en-'));
         
         if (englishVoice) {
             utterance.voice = englishVoice;
-            console.log(`[DemoGuide] Using voice: ${englishVoice.name}`);
+            console.log(`[DemoGuide] Using voice: ${englishVoice.name} (${englishVoice.lang})`);
         } else {
-            console.warn("[DemoGuide] No suitable English voice found. The browser will use its default voice, which may not be English.");
+            console.warn("[DemoGuide] No suitable English voice found. The browser will use its default voice.");
         }
         
-        utterance.onend = () => setIsPlaying(false);
+        utterance.onstart = () => {
+            console.log("[DemoGuide] Speech started.");
+            setIsPlaying(true);
+        };
+        utterance.onend = () => {
+            console.log("[DemoGuide] Speech ended.");
+            setIsPlaying(false);
+        };
         utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
             console.error(`[DemoGuide] SpeechSynthesis Error: ${e.error}`, e);
             setIsPlaying(false);
         };
         
         utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
-        setIsPlaying(true);
+        
+        // A tiny delay can help with race conditions in some browser engines
+        setTimeout(() => {
+            console.log("[DemoGuide] Attempting to speak text:", `"${text}"`);
+            window.speechSynthesis.speak(utterance);
+        }, 50);
+
     }, [voices]);
 
+    // Cleanup and reset state when the modal is closed
     useEffect(() => {
         if (!isOpen) {
-            window.speechSynthesis.cancel();
             setIsPlaying(false);
             setCurrentIndex(0);
             setNarrationInitiated(false);
         }
     }, [isOpen]);
 
+    // Auto-play narration when the slide changes, but only if the user has started it
     useEffect(() => {
         if (isOpen && narrationInitiated) {
              speak(slides[currentIndex].narration);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex, speak]);
+    }, [currentIndex]);
     
 
     if (!isOpen) return null;
@@ -219,23 +247,15 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     const handlePrev = () => {
         setCurrentIndex((prevIndex) => (prevIndex - 1 + slides.length) % slides.length);
     };
-
+    
+    // This function now acts as a more reliable play/stop toggle
     const handlePlayPause = () => {
-        if (!narrationInitiated) {
-            setNarrationInitiated(true);
-            speak(slides[currentIndex].narration);
-            return;
-        }
-
-        if (window.speechSynthesis.speaking) {
-            if (isPlaying) {
-                window.speechSynthesis.pause();
-                setIsPlaying(false);
-            } else {
-                window.speechSynthesis.resume();
-                setIsPlaying(true);
-            }
+        if (isPlaying) {
+            window.speechSynthesis.cancel(); // This will trigger onend, which sets isPlaying to false
         } else {
+            if (!narrationInitiated) {
+                setNarrationInitiated(true);
+            }
             speak(slides[currentIndex].narration);
         }
     };
@@ -278,7 +298,7 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
                         <p className="text-sm text-gray-500 font-medium">
                             {currentIndex + 1} / {slides.length}
                         </p>
-                        <button onClick={handlePlayPause} className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors" aria-label={isPlaying ? 'Pause narration' : 'Play narration'}>
+                        <button onClick={handlePlayPause} className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors" aria-label={isPlaying ? 'Stop narration' : 'Play narration'}>
                             {isPlaying ? <PauseIcon className="h-5 w-5"/> : <PlayIcon className="h-5 w-5"/>}
                         </button>
                     </div>
