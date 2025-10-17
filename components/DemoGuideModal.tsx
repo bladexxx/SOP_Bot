@@ -155,13 +155,13 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         if (englishVoice) {
             utterance.voice = englishVoice;
         }
-        
+        console.log("go 1");
         utterance.onend = () => setIsPlaying(false);
         utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
             console.error(`SpeechSynthesis Error: ${e.error}`, e);
             setIsPlaying(false);
         };
-
+        console.log("go 2");
         utteranceRef.current = utterance;
         window.speechSynthesis.speak(utterance);
         setIsPlaying(true);
