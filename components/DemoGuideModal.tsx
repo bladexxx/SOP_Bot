@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon } from './Icons';
+import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon, TemplateIcon, DuplicateIcon, ImportIcon, AddDatabaseIcon } from './Icons';
 
 const slides = [
     {
@@ -44,12 +44,54 @@ const slides = [
     },
     {
         id: 3,
+        title: "Flexible Configuration Creation",
+        visual: (
+            <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 flex flex-col">
+                <h3 className="font-bold text-gray-800 text-sm mb-2">Create New Configuration</h3>
+                <div className="space-y-1.5 flex-grow flex flex-col justify-center">
+                    <div className="p-2 bg-gray-100 rounded-md border border-gray-200 text-xs flex items-center"><TemplateIcon/><span className="ml-2">Start from a Project Template</span></div>
+                    <div className="p-2 bg-gray-100 rounded-md border border-gray-200 text-xs flex items-center"><DuplicateIcon/><span className="ml-2">Clone an Existing Configuration</span></div>
+                    <div className="p-2 bg-teal-50 rounded-md border-2 border-teal-400 text-xs font-semibold text-teal-800 flex items-center"><ImportIcon/><span className="ml-2">Import from JSON</span></div>
+                </div>
+            </div>
+        ),
+        caption: "Create new configurations with ease. Start from a project template, clone an existing setup, or import raw JSON to automatically generate both a config and a template.",
+        narration: "Creating new configurations is flexible. You can start from a pre-defined project template, clone an existing configuration, or, for maximum speed, import raw JSON data to instantly generate a complete setup."
+    },
+    {
+        id: 4,
+        title: "Establish Golden Benchmarks",
+        visual: (
+            <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 flex flex-col">
+                <h3 className="font-bold text-gray-800 text-sm mb-2 flex items-center"><AddDatabaseIcon /><span className="ml-2">Add Golden Benchmark</span></h3>
+                <div className="space-y-2 text-xs flex-grow">
+                    <div className="flex items-center space-x-2">
+                        <label className="w-20 text-gray-500">Benchmark ID</label>
+                        <input type="text" readOnly value="BM-AV-02" className="flex-grow bg-gray-100 rounded-md p-1 border border-gray-300"/>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <label className="w-20 text-gray-500">Project Name</label>
+                        <input type="text" readOnly value="AutoVouch" className="flex-grow bg-gray-100 rounded-md p-1 border border-gray-300"/>
+                    </div>
+                     <div className="flex items-center space-x-2">
+                        <label className="w-20 text-gray-500">Description</label>
+                        <input type="text" readOnly value="New Q2 benchmark..." className="flex-grow bg-gray-100 rounded-md p-1 border border-gray-300"/>
+                    </div>
+                </div>
+                <button className="mt-auto ml-auto px-3 py-1 text-xs font-semibold text-white bg-teal-900 rounded-md">Save Benchmark</button>
+            </div>
+        ),
+        caption: "Define your 'source of truth' for testing by creating Golden Benchmarks. These datasets are used to validate test runs and ensure data integrity over time.",
+        narration: "A key feature is the ability to establish your source of truth for testing. You can easily define new Golden Benchmarks, which are then used to validate all future test runs for a project."
+    },
+    {
+        id: 5,
         title: "Step 2: Execute a Test",
         visual: (
             <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 flex flex-col justify-center">
                 <h3 className="font-bold text-gray-800 text-sm mb-2">Start a New Test</h3>
                  <div className="p-2 border border-gray-200 rounded-lg">
-                    <h4 className="text-xs font-medium text-gray-600">Run with Single File</h4>
+                    <h4 className="text-xs font-medium text-gray-600 flex items-center"><PaperclipIcon /><span className="ml-2">Run with Single File</span></h4>
                      <p className="text-xs text-gray-500 mt-1">Upload a file for immediate testing.</p>
                      <div className="flex justify-end mt-1">
                         <button className="px-3 py-1 text-xs font-semibold text-white bg-teal-900 rounded-md">Upload and Run</button>
@@ -61,7 +103,7 @@ const slides = [
         narration: "Next, you'll execute the test. The bot makes it simple to provide your data, either by uploading a single file for a quick functional test, or by starting a larger batch test."
     },
     {
-        id: 4,
+        id: 6,
         title: "Step 3: Review the Results",
         visual: (
             <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 flex flex-col justify-center">
@@ -82,7 +124,7 @@ const slides = [
         narration: "Once the automated test is complete, the bot provides an immediate, easy-to-read summary. You'll see exactly how many records matched the benchmark and how many had discrepancies."
     },
     {
-        id: 5,
+        id: 7,
         title: "Step 4: Analyze with AI",
         visual: (
             <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 flex flex-col justify-center">
@@ -102,8 +144,32 @@ const slides = [
         caption: "For any discrepancies, the AI assistant can perform a root cause analysis, identify the likely problem, and suggest corrective actions to resolve the issue.",
         narration: "The final step is to understand any failures. The built-in AI assistant analyzes discrepancies, points to the probable root cause, and suggests actions, helping you resolve issues quickly."
     },
+     {
+        id: 8,
+        title: "Augment AI with Knowledge",
+        visual: (
+            <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 flex items-center justify-center space-x-4">
+                <div className="text-center">
+                    <PaperclipIcon />
+                    <p className="text-xs mt-1">Upload .md</p>
+                </div>
+                <div className="text-gray-300 font-sans text-2xl">&rarr;</div>
+                <div className="text-center p-3 bg-teal-50 rounded-full">
+                    <GeminiIcon className="h-8 w-8 text-teal-700"/>
+                    <p className="text-xs mt-1 font-semibold">Smarter AI</p>
+                </div>
+                <div className="text-gray-300 font-sans text-2xl">&rarr;</div>
+                 <div className="text-center">
+                    <SparklesIcon />
+                    <p className="text-xs mt-1">New Tips</p>
+                </div>
+            </div>
+        ),
+        caption: "Make the AI assistant smarter by uploading your own knowledge documents. The bot will use this context to provide more accurate answers and automatically generate helpful tips.",
+        narration: "You can make the AI assistant an expert on your specific processes. Simply upload your own knowledge documents, and the bot will use that information to give more tailored answers and even create new tips for your team automatically."
+    },
     {
-        id: 6,
+        id: 9,
         title: "Auxiliary Features",
         visual: (
             <div className="w-full h-full bg-white p-3 rounded-md border border-gray-200 grid grid-cols-2 grid-rows-2 gap-3 text-center">
@@ -125,8 +191,8 @@ const slides = [
                 </div>
             </div>
         ),
-        caption: "Beyond the SOPs, you can use helper commands, upload knowledge documents, get tips, and ask the AI general questions for a more powerful workflow.",
-        narration: "While the guided SOP is the primary feature, the bot also includes powerful auxiliary tools. You can search for configurations, upload knowledge documents to make the AI smarter, get helpful tips, and ask the AI questions directly."
+        caption: "The bot includes a suite of powerful tools. You can search configurations, get helpful tips, and ask the AI general questions about your project's context.",
+        narration: "Beyond the main workflows, the bot includes powerful auxiliary tools. You can instantly search all configurations, get helpful tips on how to use the bot, and ask the integrated AI assistant complex questions about your data."
     }
 ];
 
