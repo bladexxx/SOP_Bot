@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon, TemplateIcon, DuplicateIcon, ImportIcon, AddDatabaseIcon, LoadingSpinner } from './Icons';
-import { generateSpeechFromText } from '../services/aiService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon, TemplateIcon, DuplicateIcon, ImportIcon, AddDatabaseIcon } from './Icons';
 
 const slides = [
     {
@@ -197,52 +196,6 @@ const slides = [
     }
 ];
 
-// Audio decoding helpers from Gemini documentation.
-// These are necessary to process the raw PCM audio data returned by the TTS API.
-
-/**
- * Decodes a base64 string into a Uint8Array.
- */
-function decode(base64: string): Uint8Array {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-/**
- * Decodes raw PCM audio data into an AudioBuffer that can be played by the Web Audio API.
- * @param data The raw audio data as a Uint8Array.
- * @param ctx The AudioContext to use for creating the buffer.
- * @param sampleRate The sample rate of the audio (Gemini TTS is 24000Hz).
- * @param numChannels The number of audio channels (Gemini TTS is mono).
- * @returns A promise that resolves with the decoded AudioBuffer.
- */
-async function decodeAudioData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
-  // The raw data is 16-bit PCM, so we create an Int16Array view on the buffer.
-  const dataInt16 = new Int16Array(data.buffer);
-  const frameCount = dataInt16.length / numChannels;
-  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
-  for (let channel = 0; channel < numChannels; channel++) {
-    const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      // Normalize the 16-bit integer samples to the -1.0 to 1.0 range for the Web Audio API.
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
-  }
-  return buffer;
-}
-
-
 interface DemoGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -251,114 +204,52 @@ interface DemoGuideModalProps {
 export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-    const [audioCache, setAudioCache] = useState<Record<number, string>>({}); // Cache for base64 audio strings
+    const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+    
+    // Load available voices for speech synthesis
+    useEffect(() => {
+        if (!isOpen || !('speechSynthesis' in window)) {
+            return;
+        }
 
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+        const loadVoices = () => {
+            const availableVoices = window.speechSynthesis.getVoices();
+            if (availableVoices.length > 0) {
+                setVoices(availableVoices);
+            }
+        };
 
-    // Stop any currently playing audio
-    const stopAudio = useCallback(() => {
-        if (audioSourceRef.current) {
-            audioSourceRef.current.stop();
-            audioSourceRef.current.disconnect();
-            audioSourceRef.current = null;
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        return () => {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.onvoiceschanged = null;
+            }
+        };
+    }, [isOpen]);
+
+    // Stop speech synthesis
+    const stopSpeech = useCallback(() => {
+        if (window.speechSynthesis && window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
         }
         setIsPlaying(false);
     }, []);
 
-    // Cleanup when the modal is closed
+    // Cleanup when the modal is closed or the slide changes
     useEffect(() => {
-        if (!isOpen) {
-            stopAudio();
-            // Clean up the AudioContext and its resources when the modal is closed.
-            if (audioContextRef.current) {
-                audioContextRef.current.close();
-                audioContextRef.current = null;
-            }
-            setIsGeneratingAudio(false);
-            setCurrentIndex(0); // Reset to the first slide
+        if (isOpen) {
+            stopSpeech();
         }
-    }, [isOpen, stopAudio]);
-    
-    // Function to play audio from a base64 string
-    const playAudio = useCallback(async (base64Audio: string) => {
-        try {
-            // Lazily create the AudioContext on the first user interaction (play click).
-            // This is crucial for complying with modern browser autoplay policies.
-            if (!audioContextRef.current) {
-                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-            }
-            // Always attempt to resume the context in case it's in a suspended state.
-            if (audioContextRef.current.state === 'suspended') {
-                await audioContextRef.current.resume();
-            }
-            
-            stopAudio();
+    }, [currentIndex, isOpen, stopSpeech]);
 
-            const decodedBytes = decode(base64Audio);
-            // FIX: The arguments for decodeAudioData were swapped. The Uint8Array of decoded bytes
-            // should be passed first, followed by the AudioContext.
-            const audioBuffer = await decodeAudioData(decodedBytes, audioContextRef.current, 24000, 1);
-            
-            const source = audioContextRef.current.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContextRef.current.destination);
-            
-            source.onended = () => {
-                // Ensure we only update state if this is still the active audio source
-                if (audioSourceRef.current === source) {
-                    setIsPlaying(false);
-                    audioSourceRef.current = null;
-                }
-            };
-
-            source.start();
-            audioSourceRef.current = source;
-            setIsPlaying(true);
-        } catch (error) {
-            console.error("[DemoGuide] Error playing audio:", error);
-            setIsPlaying(false);
-        }
-    }, [stopAudio]);
-
-    // Effect to pre-cache audio for the current slide.
+    // Ensure speech is cancelled on component unmount
     useEffect(() => {
-        if (!isOpen) return;
-
-        let isCancelled = false;
-        stopAudio();
-
-        const generateAndCacheAudio = async () => {
-            const narrationText = slides[currentIndex].narration;
-
-            if (audioCache[currentIndex]) {
-                return; // Audio already in cache
-            }
-
-            setIsGeneratingAudio(true);
-            try {
-                const base64Audio = await generateSpeechFromText(narrationText);
-                if (!isCancelled) {
-                    setAudioCache(prev => ({ ...prev, [currentIndex]: base64Audio }));
-                }
-            } catch (error) {
-                console.error("[DemoGuide] Failed to pre-cache speech:", error);
-            } finally {
-                if (!isCancelled) {
-                    setIsGeneratingAudio(false);
-                }
-            }
-        };
-
-        generateAndCacheAudio();
-
         return () => {
-            isCancelled = true;
+            stopSpeech();
         };
-    }, [isOpen, currentIndex, audioCache, stopAudio]);
-
-    if (!isOpen) return null;
+    }, [stopSpeech]);
 
     const handleNext = () => {
         setCurrentIndex((prevIndex) => (prevIndex + 1) % slides.length);
@@ -368,13 +259,49 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         setCurrentIndex((prevIndex) => (prevIndex - 1 + slides.length) % slides.length);
     };
 
-    const handlePlayPause = async () => {
+    const handlePlayPause = () => {
         if (isPlaying) {
-            stopAudio();
-        } else if (audioCache[currentIndex] && !isGeneratingAudio) {
-            await playAudio(audioCache[currentIndex]);
+            stopSpeech();
+            return;
+        }
+
+        if ('speechSynthesis' in window) {
+            const narrationText = slides[currentIndex].narration;
+            const utterance = new SpeechSynthesisUtterance(narrationText);
+            
+            // Find and set a female voice, prioritizing known high-quality voices
+            const femaleVoice = 
+                voices.find(voice => voice.name === 'Google US English' && voice.lang.startsWith('en-US')) || 
+                voices.find(voice => voice.lang.startsWith('en-US') && voice.name.toLowerCase().includes('female')) || 
+                voices.find(voice => voice.lang.startsWith('en') && voice.name.toLowerCase().includes('female')) ||
+                voices.find(voice => voice.lang.startsWith('en-US') && (voice.name.toLowerCase().includes('zira') || voice.name.toLowerCase().includes('susan')));
+
+            if (femaleVoice) {
+                utterance.voice = femaleVoice;
+            } else {
+                console.warn("Could not find a preferred female English voice. Using browser default.");
+            }
+
+            utterance.onstart = () => {
+                setIsPlaying(true);
+            };
+            
+            utterance.onend = () => {
+                setIsPlaying(false);
+            };
+
+            utterance.onerror = (event) => {
+                console.error('An error occurred during speech synthesis:', event);
+                setIsPlaying(false);
+            };
+            
+            window.speechSynthesis.speak(utterance);
+        } else {
+            console.warn('Web Speech API is not supported by this browser.');
         }
     };
+    
+    if (!isOpen) return null;
     
     const currentSlide = slides[currentIndex];
 
@@ -416,11 +343,10 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
                         </p>
                         <button 
                             onClick={handlePlayPause} 
-                            disabled={isGeneratingAudio}
-                            className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors disabled:bg-gray-400 disabled:cursor-wait"
+                            className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors"
                             aria-label={isPlaying ? 'Stop narration' : 'Play narration'}
                         >
-                            {isGeneratingAudio ? <LoadingSpinner /> : (isPlaying ? <PauseIcon className="h-5 w-5"/> : <PlayIcon className="h-5 w-5"/>)}
+                            {isPlaying ? <PauseIcon className="h-5 w-5"/> : <PlayIcon className="h-5 w-5"/>}
                         </button>
                     </div>
                     <button onClick={handleNext} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors" aria-label="Next slide">
