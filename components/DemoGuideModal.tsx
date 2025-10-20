@@ -21,7 +21,8 @@ const slides = [
             </div>
         ),
         caption: "Choose a guided workflow based on your role. The bot will lead you through complex processes like testing and validation, step-by-step.",
-        narration: "Welcome to the FlowX SOP Bot. To begin, select a guided Standard Operating Procedure based on your role. This is the main function of the bot, designed to ensure a smooth and accurate workflow."
+        narration: "Welcome to the FlowX SOP Bot. To begin, select a guided Standard Operating Procedure based on your role. This is the main function of the bot, designed to ensure a smooth and accurate workflow.",
+        narration_zh: "欢迎来到 FlowX 标准作业流程机器人。首先，请根据您的角色选择一个引导式标准作业流程。这是机器人的主要功能，旨在确保工作流程的顺畅和准确。"
     },
     {
         id: 2,
@@ -40,7 +41,8 @@ const slides = [
             </div>
         ),
         caption: "Find the exact configuration you need for your task. The bot allows you to quickly search and select from all available project and vendor-level configs.",
-        narration: "The first step in most procedures is to select your configuration. You can easily search for the one you need, whether it's for an entire project or a specific vendor."
+        narration: "The first step in most procedures is to select your configuration. You can easily search for the one you need, whether it's for an entire project or a specific vendor.",
+        narration_zh: "大多数流程的第一步是选择您的配置。您可以轻松搜索到您需要的配置，无论是针对整个项目还是特定供应商。"
     },
     {
         id: 3,
@@ -56,7 +58,8 @@ const slides = [
             </div>
         ),
         caption: "Create new configurations with ease. Start from a project template, clone an existing setup, or import raw JSON to automatically generate both a config and a template.",
-        narration: "Creating new configurations is flexible. You can start from a pre-defined project template, clone an existing configuration, or, for maximum speed, import raw JSON data to instantly generate a complete setup."
+        narration: "Creating new configurations is flexible. You can start from a pre-defined project template, clone an existing configuration, or, for maximum speed, import raw JSON data to instantly generate a complete setup.",
+        narration_zh: "创建新配置非常灵活。您可以从预定义的项目模板开始，克隆现有配置，或者为了最快速度，导入原始JSON数据以立即生成完整设置。"
     },
     {
         id: 4,
@@ -82,7 +85,8 @@ const slides = [
             </div>
         ),
         caption: "Define your 'source of truth' for testing by creating Golden Benchmarks. These datasets are used to validate test runs and ensure data integrity over time.",
-        narration: "A key feature is the ability to establish your source of truth for testing. You can easily define new Golden Benchmarks, which are then used to validate all future test runs for a project."
+        narration: "A key feature is the ability to establish your source of truth for testing. You can easily define new Golden Benchmarks, which are then used to validate all future test runs for a project.",
+        narration_zh: "一个关键功能是能够建立您测试的“单一事实来源”。您可以轻松定义新的黄金基准，用于验证项目未来的所有测试运行。"
     },
     {
         id: 5,
@@ -100,7 +104,8 @@ const slides = [
             </div>
         ),
         caption: "Provide the necessary data for your test. You can upload a single file for a quick check or point the bot to a batch data path for a full regression run.",
-        narration: "Next, you'll execute the test. The bot makes it simple to provide your data, either by uploading a single file for a quick functional test, or by starting a larger batch test."
+        narration: "Next, you'll execute the test. The bot makes it simple to provide your data, either by uploading a single file for a quick functional test, or by starting a larger batch test.",
+        narration_zh: "接下来，您将执行测试。机器人使提供数据变得简单，您可以上传单个文件进行快速功能测试，或者启动一个更大的批量测试。"
     },
     {
         id: 6,
@@ -121,7 +126,8 @@ const slides = [
             </div>
         ),
         caption: "After the automated flow completes, the bot presents a clear summary of the test results, showing you exactly what matched and what didn't.",
-        narration: "Once the automated test is complete, the bot provides an immediate, easy-to-read summary. You'll see exactly how many records matched the benchmark and how many had discrepancies."
+        narration: "Once the automated test is complete, the bot provides an immediate, easy-to-read summary. You'll see exactly how many records matched the benchmark and how many had discrepancies.",
+        narration_zh: "自动化测试完成后，机器人会立即提供一个清晰易读的摘要。您会清楚地看到有多少记录与基准匹配，有多少存在差异。"
     },
     {
         id: 7,
@@ -142,7 +148,8 @@ const slides = [
             </div>
         ),
         caption: "For any discrepancies, the AI assistant can perform a root cause analysis, identify the likely problem, and suggest corrective actions to resolve the issue.",
-        narration: "The final step is to understand any failures. The built-in AI assistant analyzes discrepancies, points to the probable root cause, and suggests actions, helping you resolve issues quickly."
+        narration: "The final step is to understand any failures. The built-in AI assistant analyzes discrepancies, points to the probable root cause, and suggests actions, helping you resolve issues quickly.",
+        narration_zh: "最后一步是了解任何失败的原因。内置的AI助手会分析差异，指出可能的根本原因，并建议纠正措施，帮助您快速解决问题。"
     },
      {
         id: 8,
@@ -166,7 +173,8 @@ const slides = [
             </div>
         ),
         caption: "Make the AI assistant smarter by uploading your own knowledge documents. The bot will use this context to provide more accurate answers and automatically generate helpful tips.",
-        narration: "You can make the AI assistant an expert on your specific processes. Simply upload your own knowledge documents, and the bot will use that information to give more tailored answers and even create new tips for your team automatically."
+        narration: "You can make the AI assistant an expert on your specific processes. Simply upload your own knowledge documents, and the bot will use that information to give more tailored answers and even create new tips for your team automatically.",
+        narration_zh: "您可以让AI助手成为您特定流程的专家。只需上传您自己的知识文档，机器人就会利用这些信息提供更量身定制的答案，甚至自动为您的团队创建新的提示。"
     },
     {
         id: 9,
@@ -192,7 +200,8 @@ const slides = [
             </div>
         ),
         caption: "The bot includes a suite of powerful tools. You can search configurations, get helpful tips, and ask the AI general questions about your project's context.",
-        narration: "Beyond the main workflows, the bot includes powerful auxiliary tools. You can instantly search all configurations, get helpful tips on how to use the bot, and ask the integrated AI assistant complex questions about your data."
+        narration: "Beyond the main workflows, the bot includes powerful auxiliary tools. You can instantly search all configurations, get helpful tips on how to use the bot, and ask the integrated AI assistant complex questions about your data.",
+        narration_zh: "除了主要工作流程外，该机器人还包括强大的辅助工具。您可以即时搜索所有配置，获取有关如何使用机器人的有用提示，并向集成的AI助手询问有关您数据的复杂问题。"
     }
 ];
 
@@ -205,6 +214,7 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+    const [language, setLanguage] = useState<'en' | 'zh'>('en');
     
     // Load available voices for speech synthesis
     useEffect(() => {
@@ -266,20 +276,37 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         }
 
         if ('speechSynthesis' in window) {
-            const narrationText = slides[currentIndex].narration;
+            const currentSlide = slides[currentIndex];
+            const narrationText = language === 'zh'
+                ? (currentSlide as any).narration_zh 
+                : currentSlide.narration;
+            
+            if (!narrationText) {
+                console.warn(`No narration found for language: ${language}`);
+                return;
+            }
+
             const utterance = new SpeechSynthesisUtterance(narrationText);
             
-            // Find and set a female voice, prioritizing known high-quality voices
-            const femaleVoice = 
-                voices.find(voice => voice.name === 'Google US English' && voice.lang.startsWith('en-US')) || 
-                voices.find(voice => voice.lang.startsWith('en-US') && voice.name.toLowerCase().includes('female')) || 
-                voices.find(voice => voice.lang.startsWith('en') && voice.name.toLowerCase().includes('female')) ||
-                voices.find(voice => voice.lang.startsWith('en-US') && (voice.name.toLowerCase().includes('zira') || voice.name.toLowerCase().includes('susan')));
+            let selectedVoice: SpeechSynthesisVoice | undefined;
 
-            if (femaleVoice) {
-                utterance.voice = femaleVoice;
+            if (language === 'zh') {
+                 selectedVoice = 
+                    voices.find(voice => voice.lang.startsWith('zh') && voice.localService) ||
+                    voices.find(voice => voice.lang.startsWith('zh') && voice.name.toLowerCase().includes('female')) ||
+                    voices.find(voice => voice.lang.startsWith('zh'));
             } else {
-                console.warn("Could not find a preferred female English voice. Using browser default.");
+                 selectedVoice = 
+                    voices.find(voice => voice.name === 'Google US English' && voice.lang.startsWith('en-US')) || 
+                    voices.find(voice => voice.lang.startsWith('en-US') && voice.name.toLowerCase().includes('female')) || 
+                    voices.find(voice => voice.lang.startsWith('en') && voice.name.toLowerCase().includes('female')) ||
+                    voices.find(voice => voice.lang.startsWith('en-US') && (voice.name.toLowerCase().includes('zira') || voice.name.toLowerCase().includes('susan')));
+            }
+
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            } else {
+                console.warn(`Could not find a preferred female voice for language "${language}". Using browser default.`);
             }
 
             utterance.onstart = () => {
@@ -341,6 +368,16 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
                         <p className="text-sm text-gray-500 font-medium">
                             {currentIndex + 1} / {slides.length}
                         </p>
+                        <button
+                            onClick={() => {
+                                stopSpeech();
+                                setLanguage(lang => lang === 'en' ? 'zh' : 'en');
+                            }}
+                            className="w-9 h-9 flex items-center justify-center text-sm font-semibold rounded-full transition-colors duration-200 bg-gray-200 hover:bg-gray-300 text-gray-700"
+                            title="Switch language (English/Chinese)"
+                        >
+                            {language === 'en' ? '中' : 'EN'}
+                        </button>
                         <button 
                             onClick={handlePlayPause} 
                             className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors"
