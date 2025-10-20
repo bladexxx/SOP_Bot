@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, Modality } from '@google/genai';
 import { Flashcard, GeminiModel } from '../types';
 
 // This `declare` block informs TypeScript that the `process` object is globally available.
@@ -283,5 +283,49 @@ export const generateFlashcardsFromText = async (text: string, modelOverride?: G
             console.error("[AI Service] Error generating flashcards with Gemini:", error);
             throw new Error(`Failed to generate flashcards from the provided text. Details: ${error}`);
         }
+    }
+};
+
+/**
+ * Generates high-quality speech audio from text using the Gemini TTS model.
+ * @param text The text to convert to speech.
+ * @returns A promise that resolves with the base64 encoded audio data as a string.
+ */
+export const generateSpeechFromText = async (text: string): Promise<string> => {
+    if (!geminiApiKey) {
+        const errorMsg = 'Direct Gemini API is required for speech generation, but the API_KEY is missing in the execution environment.';
+        console.error(`[AI Service] Aborting request. ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+
+    console.log(`[AI Service] Generating speech for text: "${text.substring(0, 50)}..."`);
+    
+    try {
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: text }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                  // Using 'Kore' for a high-quality, professional-sounding voice.
+                  prebuiltVoiceConfig: { voiceName: 'Kore' }, 
+                },
+            },
+          },
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!base64Audio) {
+            throw new Error("No audio data returned from Gemini TTS API.");
+        }
+        
+        console.log('[AI Service] Successfully received speech data from Gemini.');
+        return base64Audio;
+
+    } catch (error) {
+        console.error('[AI Service] Error calling Gemini TTS API:', error);
+        throw error;
     }
 };

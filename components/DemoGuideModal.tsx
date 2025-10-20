@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon, TemplateIcon, DuplicateIcon, ImportIcon, AddDatabaseIcon } from './Icons';
+import { XCircleIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SparklesIcon, SearchIcon, PaperclipIcon, GeminiIcon, TemplateIcon, DuplicateIcon, ImportIcon, AddDatabaseIcon, LoadingSpinner } from './Icons';
+import { generateSpeechFromText } from '../services/aiService';
 
 const slides = [
     {
@@ -196,6 +197,52 @@ const slides = [
     }
 ];
 
+// Audio decoding helpers from Gemini documentation.
+// These are necessary to process the raw PCM audio data returned by the TTS API.
+
+/**
+ * Decodes a base64 string into a Uint8Array.
+ */
+function decode(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Decodes raw PCM audio data into an AudioBuffer that can be played by the Web Audio API.
+ * @param data The raw audio data as a Uint8Array.
+ * @param ctx The AudioContext to use for creating the buffer.
+ * @param sampleRate The sample rate of the audio (Gemini TTS is 24000Hz).
+ * @param numChannels The number of audio channels (Gemini TTS is mono).
+ * @returns A promise that resolves with the decoded AudioBuffer.
+ */
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  // The raw data is 16-bit PCM, so we create an Int16Array view on the buffer.
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      // Normalize the 16-bit integer samples to the -1.0 to 1.0 range for the Web Audio API.
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
+
 interface DemoGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -204,92 +251,99 @@ interface DemoGuideModalProps {
 export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-    const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+    const [audioCache, setAudioCache] = useState<Record<number, string>>({}); // Cache for base64 audio strings
 
-    const stopSpeaking = useCallback(() => {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+    // Stop any currently playing audio
+    const stopAudio = useCallback(() => {
+        if (audioSourceRef.current) {
+            audioSourceRef.current.stop();
+            audioSourceRef.current.disconnect();
+            audioSourceRef.current = null;
         }
+        setIsPlaying(false);
     }, []);
 
+    // Cleanup when the modal is closed
     useEffect(() => {
         if (!isOpen) {
-            stopSpeaking();
-            setCurrentIndex(0);
+            stopAudio();
+            setIsGeneratingAudio(false);
+            setCurrentIndex(0); // Reset to the first slide
+        } else if (!audioContextRef.current) {
+             // Initialize AudioContext on open. Gemini TTS outputs at 24000Hz.
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         }
-    }, [isOpen, stopSpeaking]);
+    }, [isOpen, stopAudio]);
+    
+    // Function to play audio from a base64 string
+    const playAudio = useCallback(async (base64Audio: string) => {
+        if (!audioContextRef.current) return;
+        
+        stopAudio();
 
+        try {
+            const decodedBytes = decode(base64Audio);
+            const audioBuffer = await decodeAudioData(decodedBytes, audioContextRef.current, 24000, 1);
+            
+            const source = audioContextRef.current.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContextRef.current.destination);
+            
+            source.onended = () => {
+                setIsPlaying(false);
+                audioSourceRef.current = null;
+            };
+
+            source.start();
+            audioSourceRef.current = source;
+            setIsPlaying(true);
+        } catch (error) {
+            console.error("[DemoGuide] Error playing audio:", error);
+            setIsPlaying(false);
+        }
+    }, [stopAudio]);
+
+    // Main effect to auto-generate and auto-play audio when the slide changes
     useEffect(() => {
-        if (!isOpen || !('speechSynthesis' in window)) return;
+        if (!isOpen) return;
 
-        const loadVoices = () => {
-            const availableVoices = window.speechSynthesis.getVoices();
-            if (availableVoices.length > 0) {
-                setVoices(availableVoices);
-                console.log(`[DemoGuide] ${availableVoices.length} speech synthesis voices loaded.`);
+        let isCancelled = false;
+
+        const generateAndPlay = async () => {
+            stopAudio();
+            const narrationText = slides[currentIndex].narration;
+
+            if (audioCache[currentIndex]) {
+                await playAudio(audioCache[currentIndex]);
+            } else {
+                setIsGeneratingAudio(true);
+                try {
+                    const base64Audio = await generateSpeechFromText(narrationText);
+                    if (!isCancelled) {
+                        setAudioCache(prev => ({ ...prev, [currentIndex]: base64Audio }));
+                        await playAudio(base64Audio);
+                    }
+                } catch (error) {
+                    console.error("[DemoGuide] Failed to generate speech:", error);
+                } finally {
+                    if (!isCancelled) {
+                        setIsGeneratingAudio(false);
+                    }
+                }
             }
         };
 
-        loadVoices();
-        if (window.speechSynthesis.onvoiceschanged !== undefined) {
-            window.speechSynthesis.onvoiceschanged = loadVoices;
-        }
+        generateAndPlay();
 
         return () => {
-            window.speechSynthesis.onvoiceschanged = null;
-            stopSpeaking();
+            isCancelled = true;
+            stopAudio();
         };
-    }, [isOpen, stopSpeaking]);
-
-    const speak = useCallback((text: string) => {
-        if (!('speechSynthesis' in window) || voices.length === 0) {
-            console.warn("[DemoGuide] Speech Synthesis not ready or no voices available.");
-            return;
-        }
-
-        stopSpeaking();
-
-        const timerId = setTimeout(() => {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utteranceRef.current = utterance;
-
-            const englishVoice = voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Google')) || voices.find(voice => voice.lang.startsWith('en-'));
-            
-            if (englishVoice) {
-                utterance.voice = englishVoice;
-                console.log(`[DemoGuide] Using voice: ${englishVoice.name} (${englishVoice.lang})`);
-            } else {
-                console.warn("[DemoGuide] No suitable English voice found, using browser default.");
-            }
-            
-            utterance.onstart = () => {
-                console.log("[DemoGuide] Speech started.");
-                setIsPlaying(true);
-            };
-            
-            utterance.onend = () => {
-                console.log("[DemoGuide] Speech ended.");
-                setIsPlaying(false);
-                utteranceRef.current = null;
-            };
-            
-            utterance.onerror = (e) => {
-                console.error(`[DemoGuide] SpeechSynthesis Error occurred: ${e.error}`, e);
-                setIsPlaying(false);
-                utteranceRef.current = null;
-            };
-
-            console.log(`[DemoGuide] Queuing speech: "${text.substring(0, 50)}..."`);
-            window.speechSynthesis.speak(utterance);
-        }, 100);
-
-        return () => clearTimeout(timerId);
-    }, [voices, stopSpeaking]);
-    
-    useEffect(() => {
-        stopSpeaking();
-    }, [currentIndex, stopSpeaking]);
+    }, [isOpen, currentIndex, playAudio, stopAudio, audioCache]);
 
     if (!isOpen) return null;
 
@@ -303,9 +357,9 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
 
     const handlePlayPause = () => {
         if (isPlaying) {
-            stopSpeaking();
-        } else {
-            speak(slides[currentIndex].narration);
+            stopAudio();
+        } else if (audioCache[currentIndex] && !isGeneratingAudio) {
+            playAudio(audioCache[currentIndex]);
         }
     };
     
@@ -347,8 +401,13 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
                         <p className="text-sm text-gray-500 font-medium">
                             {currentIndex + 1} / {slides.length}
                         </p>
-                        <button onClick={handlePlayPause} className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors" aria-label={isPlaying ? 'Stop narration' : 'Play narration'}>
-                            {isPlaying ? <PauseIcon className="h-5 w-5"/> : <PlayIcon className="h-5 w-5"/>}
+                        <button 
+                            onClick={handlePlayPause} 
+                            disabled={isGeneratingAudio}
+                            className="p-2 rounded-full text-white bg-teal-900 hover:bg-teal-800 transition-colors disabled:bg-gray-400 disabled:cursor-wait"
+                            aria-label={isPlaying ? 'Stop narration' : 'Play narration'}
+                        >
+                            {isGeneratingAudio ? <LoadingSpinner /> : (isPlaying ? <PauseIcon className="h-5 w-5"/> : <PlayIcon className="h-5 w-5"/>)}
                         </button>
                     </div>
                     <button onClick={handleNext} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors" aria-label="Next slide">
