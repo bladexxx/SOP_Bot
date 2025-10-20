@@ -267,29 +267,38 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         setIsPlaying(false);
     }, []);
 
-    // Cleanup when the modal is closed or opened
+    // Cleanup when the modal is closed
     useEffect(() => {
         if (!isOpen) {
             stopAudio();
+            // Clean up the AudioContext and its resources when the modal is closed.
+            if (audioContextRef.current) {
+                audioContextRef.current.close();
+                audioContextRef.current = null;
+            }
             setIsGeneratingAudio(false);
             setCurrentIndex(0); // Reset to the first slide
-        } else if (!audioContextRef.current) {
-             // Initialize AudioContext on open. Gemini TTS outputs at 24000Hz.
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         }
     }, [isOpen, stopAudio]);
     
     // Function to play audio from a base64 string
     const playAudio = useCallback(async (base64Audio: string) => {
-        if (!audioContextRef.current || audioContextRef.current.state === 'suspended') {
-            await audioContextRef.current?.resume();
-        }
-        if (!audioContextRef.current) return;
-        
-        stopAudio();
-
         try {
+            // Lazily create the AudioContext on the first user interaction (play click).
+            // This is crucial for complying with modern browser autoplay policies.
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            }
+            // Always attempt to resume the context in case it's in a suspended state.
+            if (audioContextRef.current.state === 'suspended') {
+                await audioContextRef.current.resume();
+            }
+            
+            stopAudio();
+
             const decodedBytes = decode(base64Audio);
+            // FIX: The arguments for decodeAudioData were swapped. The Uint8Array of decoded bytes
+            // should be passed first, followed by the AudioContext.
             const audioBuffer = await decodeAudioData(decodedBytes, audioContextRef.current, 24000, 1);
             
             const source = audioContextRef.current.createBufferSource();
@@ -297,8 +306,11 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
             source.connect(audioContextRef.current.destination);
             
             source.onended = () => {
-                setIsPlaying(false);
-                audioSourceRef.current = null;
+                // Ensure we only update state if this is still the active audio source
+                if (audioSourceRef.current === source) {
+                    setIsPlaying(false);
+                    audioSourceRef.current = null;
+                }
             };
 
             source.start();
@@ -310,24 +322,20 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         }
     }, [stopAudio]);
 
-    // Effect to pre-cache audio for the current slide. Autoplay is disabled.
+    // Effect to pre-cache audio for the current slide.
     useEffect(() => {
         if (!isOpen) return;
 
         let isCancelled = false;
-
-        // When the slide changes, stop any audio that might be playing.
         stopAudio();
 
         const generateAndCacheAudio = async () => {
             const narrationText = slides[currentIndex].narration;
 
-            // If audio is already cached, do nothing.
             if (audioCache[currentIndex]) {
-                return;
+                return; // Audio already in cache
             }
 
-            // Otherwise, generate and cache it.
             setIsGeneratingAudio(true);
             try {
                 const base64Audio = await generateSpeechFromText(narrationText);
@@ -364,7 +372,6 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         if (isPlaying) {
             stopAudio();
         } else if (audioCache[currentIndex] && !isGeneratingAudio) {
-            // If audio is cached and not generating, play it.
             await playAudio(audioCache[currentIndex]);
         }
     };
