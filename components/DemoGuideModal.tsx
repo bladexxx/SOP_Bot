@@ -267,7 +267,7 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         setIsPlaying(false);
     }, []);
 
-    // Cleanup when the modal is closed
+    // Cleanup when the modal is closed or opened
     useEffect(() => {
         if (!isOpen) {
             stopAudio();
@@ -281,6 +281,9 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
     
     // Function to play audio from a base64 string
     const playAudio = useCallback(async (base64Audio: string) => {
+        if (!audioContextRef.current || audioContextRef.current.state === 'suspended') {
+            await audioContextRef.current?.resume();
+        }
         if (!audioContextRef.current) return;
         
         stopAudio();
@@ -307,43 +310,45 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         }
     }, [stopAudio]);
 
-    // Main effect to auto-generate and auto-play audio when the slide changes
+    // Effect to pre-cache audio for the current slide. Autoplay is disabled.
     useEffect(() => {
         if (!isOpen) return;
 
         let isCancelled = false;
 
-        const generateAndPlay = async () => {
-            stopAudio();
+        // When the slide changes, stop any audio that might be playing.
+        stopAudio();
+
+        const generateAndCacheAudio = async () => {
             const narrationText = slides[currentIndex].narration;
 
+            // If audio is already cached, do nothing.
             if (audioCache[currentIndex]) {
-                await playAudio(audioCache[currentIndex]);
-            } else {
-                setIsGeneratingAudio(true);
-                try {
-                    const base64Audio = await generateSpeechFromText(narrationText);
-                    if (!isCancelled) {
-                        setAudioCache(prev => ({ ...prev, [currentIndex]: base64Audio }));
-                        await playAudio(base64Audio);
-                    }
-                } catch (error) {
-                    console.error("[DemoGuide] Failed to generate speech:", error);
-                } finally {
-                    if (!isCancelled) {
-                        setIsGeneratingAudio(false);
-                    }
+                return;
+            }
+
+            // Otherwise, generate and cache it.
+            setIsGeneratingAudio(true);
+            try {
+                const base64Audio = await generateSpeechFromText(narrationText);
+                if (!isCancelled) {
+                    setAudioCache(prev => ({ ...prev, [currentIndex]: base64Audio }));
+                }
+            } catch (error) {
+                console.error("[DemoGuide] Failed to pre-cache speech:", error);
+            } finally {
+                if (!isCancelled) {
+                    setIsGeneratingAudio(false);
                 }
             }
         };
 
-        generateAndPlay();
+        generateAndCacheAudio();
 
         return () => {
             isCancelled = true;
-            stopAudio();
         };
-    }, [isOpen, currentIndex, playAudio, stopAudio, audioCache]);
+    }, [isOpen, currentIndex, audioCache, stopAudio]);
 
     if (!isOpen) return null;
 
@@ -355,11 +360,12 @@ export const DemoGuideModal: React.FC<DemoGuideModalProps> = ({ isOpen, onClose 
         setCurrentIndex((prevIndex) => (prevIndex - 1 + slides.length) % slides.length);
     };
 
-    const handlePlayPause = () => {
+    const handlePlayPause = async () => {
         if (isPlaying) {
             stopAudio();
         } else if (audioCache[currentIndex] && !isGeneratingAudio) {
-            playAudio(audioCache[currentIndex]);
+            // If audio is cached and not generating, play it.
+            await playAudio(audioCache[currentIndex]);
         }
     };
     
