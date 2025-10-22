@@ -1,3 +1,4 @@
+
 import React, { useState, ChangeEvent, useRef, useMemo, useEffect } from 'react';
 import { Card, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate } from '../types';
 import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon, ThumbsUpIcon, ThumbsDownIcon, ImportIcon, AddDatabaseIcon, UploadIcon } from './Icons';
@@ -63,10 +64,10 @@ const EditableJsonTable: React.FC<{
     return (
         <div className="overflow-x-auto border border-gray-300 rounded-lg">
             <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-slate-300">
+                <thead className="bg-slate-200">
                     <tr>
                         {headers.map(header => (
-                            <th key={header} scope="col" className="px-4 py-2 text-left text-sm font-semibold text-slate-800">
+                            <th key={header} scope="col" className="px-2 py-1.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                 {formatTitle(header)}
                             </th>
                         ))}
@@ -79,12 +80,12 @@ const EditableJsonTable: React.FC<{
                     {value.map((row, rowIndex) => (
                         <tr key={rowIndex}>
                             {headers.map(header => (
-                                <td key={`${rowIndex}-${header}`} className="px-2 py-1 whitespace-nowrap">
+                                <td key={`${rowIndex}-${header}`} className="px-1 py-0.5 whitespace-nowrap">
                                     <input
                                         type="text"
                                         value={row[header] || ''}
                                         onChange={(e) => handleCellChange(rowIndex, header, e.target.value)}
-                                        className="w-full bg-white border border-gray-300 rounded-md shadow-sm py-1 px-2 text-gray-800 focus:outline-none focus:ring-1 focus:ring-teal-600 sm:text-sm"
+                                        className="w-full bg-white border border-gray-300 rounded-md shadow-sm py-1 px-1.5 text-gray-800 focus:outline-none focus:ring-1 focus:ring-teal-600 sm:text-xs"
                                     />
                                 </td>
                             ))}
@@ -383,14 +384,14 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
             {step === 2 && (
                 <div className="mt-2">
                     <label htmlFor={`project-name-${messageId}`} className="block text-sm font-medium text-gray-700">Project Name</label>
-                    <input type="text" id={`project-name-${messageId}`} value={projectName} onChange={(e) => setProjectName(e.target.value)} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" placeholder="e.g., Auto-billing" readOnly={isClone}/>
+                    <input type="text" id={`project-name-${messageId}`} value={projectName} onChange={(e) => setProjectName(e.target.value)} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" placeholder="e.g., Auto-billing" readOnly={isClone}/>
                 </div>
             )}
              {step === 3 && level === 'Vendor' && (
                 <div className="mt-2">
                     <p className="text-gray-700 mb-2">Project: <span className="font-semibold text-gray-800">{data.projectName}</span></p>
                     <label htmlFor={`vendor-id-${messageId}`} className="block text-sm font-medium text-gray-700">Vendor ID</label>
-                    <input type="text" id={`vendor-id-${messageId}`} value={vendorId} onChange={(e) => setVendorId(e.target.value)} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" placeholder="e.g., VEN-12345"/>
+                    <input type="text" id={`vendor-id-${messageId}`} value={vendorId} onChange={(e) => setVendorId(e.target.value)} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" placeholder="e.g., VEN-12345"/>
                 </div>
             )}
             {finalStep && (
@@ -399,7 +400,7 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
                     
                     {/* Render simple fields in a grid */}
                     {simpleFields.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                             {simpleFields.map(([key, type]) => {
                                 const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                                 const id = `${key}-${messageId}`;
@@ -423,7 +424,7 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
                                             id={id} 
                                             value={settings[key] || ''} 
                                             onChange={(e) => handleSettingsChange(key, type === 'number' ? parseFloat(e.target.value) : e.target.value)} 
-                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" 
+                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" 
                                         />
                                     </div>
                                 );
@@ -460,7 +461,7 @@ const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['on
                                             value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''}
                                             onChange={(e) => handleSettingsChange(key, e.target.value)}
                                             rows={5}
-                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 font-mono text-xs focus:outline-none focus:ring-teal-600 focus:border-teal-600"
+                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 font-mono text-xs focus:outline-none focus:ring-teal-600 focus:border-teal-600"
                                             placeholder={`Enter a valid JSON for ${label}`}
                                         />
                                     </div>
@@ -538,13 +539,13 @@ const ConfigDetailsCard: React.FC<{ payload: any, onAction: CardRendererProps['o
 
     if (isEditing) {
         const settings = editState.settings || {};
-        const commonInputClass = "mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm";
+        const commonInputClass = "mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm";
         return (
             <div>
                 <h3 className="font-bold text-lg text-gray-900 mb-3">Editing Configuration</h3>
                 <div className="space-y-4">
                     {/* Core fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                          <div>
                             <label htmlFor={`project-name-${messageId}-edit`} className="block text-sm font-medium text-gray-700">Project Name</label>
                             <input type="text" id={`project-name-${messageId}-edit`} value={editState.projectName} onChange={(e) => handleFieldChange('projectName', e.target.value)} className={commonInputClass} />
@@ -572,7 +573,7 @@ const ConfigDetailsCard: React.FC<{ payload: any, onAction: CardRendererProps['o
                     <h4 className="font-semibold text-gray-700 mb-2 pt-2">Settings</h4>
                     {/* Simple fields grid */}
                     {simpleEditFields.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                             {simpleEditFields.map(key => {
                                 const id = `${key}-${messageId}-edit`;
                                 const originalValueType = typeof payload.settings[key];
@@ -670,7 +671,7 @@ const ConfigDetailsCard: React.FC<{ payload: any, onAction: CardRendererProps['o
             {simpleSettings.length > 0 && (
                 <div className="mt-4">
                     <h4 className="font-semibold text-gray-700 mb-2">Settings</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                         {simpleSettings.map(([key, value]) => (
                             <div key={key}>
                                 <p className="text-sm font-medium text-gray-500">{formatTitle(key)}</p>
@@ -689,20 +690,20 @@ const ConfigDetailsCard: React.FC<{ payload: any, onAction: CardRendererProps['o
                     {Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' ? (
                         <div className="overflow-x-auto border border-gray-200 rounded-lg">
                             <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-slate-300">
+                                <thead className="bg-slate-200">
                                     <tr>
                                         {Object.keys(value[0]).map(header => (
-                                            <th key={header} scope="col" className="px-4 py-2 text-left text-sm font-semibold text-slate-800">
+                                            <th key={header} scope="col" className="px-3 py-1.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                                 {formatTitle(header)}
                                             </th>
                                         ))}
                                     </tr>
                                 </thead>
-                                <tbody className="bg-stone-100 divide-y divide-gray-300">
+                                <tbody className="bg-white divide-y divide-gray-200">
                                     {value.map((row, rowIndex) => (
-                                        <tr key={rowIndex}>
+                                        <tr key={rowIndex} className="hover:bg-gray-50">
                                             {Object.values(row).map((cell: any, cellIndex) => (
-                                                <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 font-mono">
+                                                <td key={cellIndex} className="px-3 py-1.5 whitespace-nowrap text-xs text-gray-800 font-mono">
                                                     {String(cell)}
                                                 </td>
                                             ))}
@@ -796,7 +797,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
                 <div className="p-3 border border-gray-200 rounded-lg">
                     <label htmlFor={`batch-path-${messageId}`} className="block text-sm font-medium text-gray-700 flex items-center"><FolderIcon /><span className="ml-2">Run Batch Test</span></label>
                     <p className="text-xs text-gray-500 mt-1">Specify the FTP, SFTP, or local path for batch data processing.</p>
-                    <input type="text" id={`batch-path-${messageId}`} value={path} onChange={(e) => setPath(e.target.value)} className="mt-2 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" />
+                    <input type="text" id={`batch-path-${messageId}`} value={path} onChange={(e) => setPath(e.target.value)} className="mt-2 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" />
                     <div className="flex justify-end mt-2">
                         <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, sopContext: payload.sopContext, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path || !selectedBenchmarkId}>
                             Start Batch Test
@@ -839,13 +840,13 @@ const TestResultsSummaryCard: React.FC<{ payload: any, onAction: CardRendererPro
             </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4 mt-4 text-center">
+        <div className="grid grid-cols-2 gap-3 mt-3 text-center">
             <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                <p className="text-2xl font-bold text-green-600">{payload.matched}</p>
+                <p className="text-xl font-bold text-green-600">{payload.matched}</p>
                 <p className="text-sm text-gray-600">Matched</p>
             </div>
              <div className="bg-red-50 p-3 rounded-lg border border-red-200">
-                <p className="text-2xl font-bold text-red-600">{payload.mismatched}</p>
+                <p className="text-xl font-bold text-red-600">{payload.mismatched}</p>
                 <p className="text-sm text-gray-600">Mismatched</p>
             </div>
         </div>
@@ -1157,7 +1158,7 @@ const JsonImporterCard: React.FC<{ onAction: CardRendererProps['onAction'], mess
                     onChange={(e) => setJsonString(e.target.value)}
                     placeholder='{ "yourKey": "yourValue", ... }'
                     rows={10}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 font-mono text-sm focus:outline-none focus:ring-teal-600 focus:border-teal-600"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-gray-800 font-mono text-sm focus:outline-none focus:ring-teal-600 focus:border-teal-600"
                 />
                 {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
             </div>
@@ -1190,7 +1191,7 @@ const TemplateEditorCard: React.FC<{ payload: any, onAction: CardRendererProps['
                         id={`template-name-${messageId}`} 
                         value={template.templateName} 
                         onChange={(e) => setTemplate({ ...template, templateName: e.target.value })}
-                        className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 sm:text-sm" 
+                        className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 sm:text-sm" 
                         disabled={isSaved}
                     />
                 </div>
@@ -1201,7 +1202,7 @@ const TemplateEditorCard: React.FC<{ payload: any, onAction: CardRendererProps['
                         value={template.description} 
                         onChange={(e) => setTemplate({ ...template, description: e.target.value })}
                         rows={2}
-                        className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 sm:text-sm" 
+                        className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 sm:text-sm" 
                         disabled={isSaved}
                     />
                 </div>
@@ -1314,15 +1315,15 @@ const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps[
         setIsSaved(false);
     };
     
-    const commonInputClass = "mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm";
+    const commonInputClass = "mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm";
     const disabledClass = isSaved ? "disabled:bg-gray-100/50 disabled:cursor-not-allowed disabled:text-gray-500" : "";
 
     return (
         <div>
             <h3 className="font-bold text-lg text-gray-900 flex items-center"><AddDatabaseIcon /><span className="ml-2">Add Golden Benchmark</span></h3>
             <p className="text-gray-600 mt-1">Define a new benchmark dataset for testing and validation.</p>
-            <div className="mt-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                         <label htmlFor={`bm-id-${messageId}`} className="block text-sm font-medium text-gray-700">Benchmark ID</label>
                         <input type="text" id={`bm-id-${messageId}`} value={benchmark.id || ''} onChange={e => handleChange('id', e.target.value)} className={`${commonInputClass} ${disabledClass}`} placeholder="e.g., BM-AV-02" disabled={isSaved} />
@@ -1347,7 +1348,7 @@ const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps[
                     <label htmlFor={`bm-desc-${messageId}`} className="block text-sm font-medium text-gray-700">Description</label>
                     <textarea id={`bm-desc-${messageId}`} value={benchmark.description || ''} onChange={e => handleChange('description', e.target.value)} rows={2} className={`${commonInputClass} ${disabledClass}`} disabled={isSaved}></textarea>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                         <label htmlFor={`bm-volume-${messageId}`} className="block text-sm font-medium text-gray-700">Data Volume (Records)</label>
                         <input type="number" id={`bm-volume-${messageId}`} value={benchmark.dataVolume || ''} onChange={e => handleChange('dataVolume', e.target.value)} className={`${commonInputClass} ${disabledClass}`} placeholder="e.g., 50000" disabled={isSaved} />
