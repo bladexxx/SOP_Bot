@@ -1,6 +1,9 @@
 
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel, KnowledgeFile } from './types';
 import { CardRenderer } from './components/CardRenderer';
 import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon, SettingsIcon, LightBulbIcon } from './components/Icons';
@@ -241,6 +244,38 @@ const APP_VERSION = '1.4';
 const SETTINGS_STORAGE_KEY = 'flowx-sop-bot-settings';
 const KNOWLEDGE_FILES_STORAGE_KEY = 'flowx-sop-bot-knowledge-files';
 const GENERATED_FLASHCARDS_STORAGE_KEY = 'flowx-sop-bot-generated-flashcards';
+
+// Component styles for rendering markdown from Gemini
+const markdownComponents = {
+  table: ({node, ...props}: any) => <div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-300 border border-gray-300 rounded-lg my-2" {...props} /></div>,
+  thead: ({node, ...props}: any) => <thead className="bg-gray-100" {...props} />,
+  th: ({node, ...props}: any) => <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700" {...props} />,
+  tbody: ({node, ...props}: any) => <tbody className="bg-white divide-y divide-gray-200" {...props} />,
+  td: ({node, ...props}: any) => <td className="px-4 py-2 text-sm text-gray-800" {...props} />,
+  p: ({node, ...props}: any) => <p className="mb-2 last:mb-0" {...props} />,
+  ul: ({node, ...props}: any) => <ul className="list-disc list-inside space-y-1 my-2" {...props} />,
+  ol: ({node, ...props}: any) => <ol className="list-decimal list-inside space-y-1 my-2" {...props} />,
+  li: ({node, ...props}: any) => <li className="pl-2" {...props} />,
+  code: ({node, inline, className, children, ...props}: any) => {
+    return !inline ? (
+      <pre className="p-3 my-2 bg-gray-800 text-white rounded-md overflow-x-auto text-sm font-mono">
+        <code className={className} {...props}>
+          {children}
+        </code>
+      </pre>
+    ) : (
+      <code className="px-1 py-0.5 bg-gray-200 text-red-600 rounded-sm font-mono text-sm" {...props}>
+        {children}
+      </code>
+    )
+  },
+  a: ({node, ...props}: any) => <a className="text-teal-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+  h1: ({node, ...props}: any) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+  h2: ({node, ...props}: any) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+  h3: ({node, ...props}: any) => <h3 className="text-base font-bold mt-2 mb-2" {...props} />,
+  blockquote: ({node, ...props}: any) => <blockquote className="pl-4 border-l-4 border-gray-300 italic my-2" {...props} />,
+};
+
 
 const App: React.FC = () => {
     const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -619,7 +654,7 @@ const App: React.FC = () => {
             `;
 
             const prompt = `
-                SYSTEM INSTRUCTION: You are an expert AI assistant for the FlowX SOP Bot. Your role is to help users understand their data and activities. Use the provided context, ESPECIALLY THE USER-PROVIDED KNOWLEDGE BASE, to answer questions about configurations, business rules, benchmark data, test results, and conversation history. Prioritize information from the knowledge base. Be concise and helpful.
+                SYSTEM INSTRUCTION: You are an expert AI assistant for the FlowX SOP Bot. Your role is to help users understand their data and activities. Use the provided context, ESPECIALLY THE USER-PROVIDED KNOWLEDGE BASE, to answer questions about configurations, business rules, benchmark data, test results, and conversation history. Prioritize information from the knowledge base. Be concise and helpful. Format your output using Markdown, especially for tables, lists, or code blocks.
                 ---
                 CONTEXT:
                 ${context}
@@ -1384,7 +1419,19 @@ const App: React.FC = () => {
                                         <span className="text-xs text-gray-500">{msg.timestamp}</span>
                                     </div>
                                     <div className={`mt-1 max-w-lg w-full ${msg.actor === Actor.USER ? 'text-right' : ''}`}>
-                                        {msg.content && <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.isGemini ? 'bg-teal-50 border border-teal-200' : (msg.actor === Actor.BOT ? 'bg-gray-200' : 'bg-teal-900 text-white')}`}>{msg.content}</div>}
+                                        {msg.content && (
+                                            msg.isGemini ? (
+                                                <div className="bg-teal-50 border border-teal-200 rounded-lg text-gray-800 text-left">
+                                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents} className="p-4">
+                                                        {msg.content}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            ) : (
+                                                <div className={`px-4 py-2 rounded-lg inline-block whitespace-pre-wrap ${msg.actor === Actor.BOT ? 'bg-gray-200' : 'bg-teal-900 text-white'}`}>
+                                                    {msg.content}
+                                                </div>
+                                            )
+                                        )}
                                         {msg.card && <CardRenderer card={msg.card} onAction={handleCardAction} messageId={msg.id} allConfigs={configs} allTemplates={templates} allBenchmarks={benchmarks} />}
                                     </div>
                                 </div>
