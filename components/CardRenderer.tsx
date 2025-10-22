@@ -1,4 +1,5 @@
 
+
 import React, { useState, ChangeEvent, useRef, useMemo, useEffect } from 'react';
 import { Card, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate } from '../types';
 import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon, ThumbsUpIcon, ThumbsDownIcon, ImportIcon, AddDatabaseIcon, UploadIcon } from './Icons';
@@ -739,20 +740,23 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
         return allBenchmarks.filter(b => b.projectName === payload.config.projectName);
     }, [allBenchmarks, payload.config]);
 
-    const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | undefined>(
-        relevantBenchmarks.length > 0 ? relevantBenchmarks[0].id : undefined
-    );
-
-    useEffect(() => {
-        if (relevantBenchmarks.length > 0 && !selectedBenchmarkId) {
-            setSelectedBenchmarkId(relevantBenchmarks[0].id);
-        }
-    }, [relevantBenchmarks, selectedBenchmarkId]);
+    const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | undefined>(undefined);
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files[0]) {
             const file = event.target.files[0];
             onAction(ActionType.RUN_TEST_WITH_FILE, { messageId, file, sopContext: payload.sopContext, benchmarkId: selectedBenchmarkId, config: payload.config });
+        }
+    };
+
+    const handleBenchmarkChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = e.target.value;
+        if (value === 'add_new_benchmark') {
+            onAction(ActionType.SHOW_BENCHMARK_WIZARD, { projectName: payload.config.projectName });
+            // Reset selection to 'None' after triggering the action, providing a consistent state
+            setSelectedBenchmarkId(undefined);
+        } else {
+            setSelectedBenchmarkId(value || undefined);
         }
     };
     
@@ -764,26 +768,28 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
             {payload.config && (
                 <div className="mt-4">
                     <label htmlFor={`benchmark-selector-${messageId}`} className="block text-sm font-medium text-gray-700 flex items-center mb-2">
-                        <DatabaseIcon /><span className="ml-2">Target Benchmark Dataset</span>
+                        <DatabaseIcon /><span className="ml-2">Target Benchmark Dataset (Optional)</span>
                     </label>
                     {relevantBenchmarks.length > 0 ? (
                         <select
                             id={`benchmark-selector-${messageId}`}
                             value={selectedBenchmarkId || ''}
-                            onChange={(e) => setSelectedBenchmarkId(e.target.value)}
+                            onChange={handleBenchmarkChange}
                             className="w-full bg-white text-gray-800 placeholder-gray-400 border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-600"
                         >
+                            <option value="">None (run without comparison)</option>
                             {relevantBenchmarks.map(b => <option key={b.id} value={b.id}>{b.id} ({b.description.substring(0, 30)}...)</option>)}
+                             <option value="add_new_benchmark" className="font-semibold text-teal-700 bg-gray-100 border-t-2 border-gray-200 mt-2">-- Add New Benchmark --</option>
                         </select>
                     ) : (
                         <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-md text-center">
                             <p className="text-sm text-yellow-700">No Golden Benchmarks found for project '{payload.config.projectName}'.</p>
-                            <p className="text-xs text-yellow-600 mt-1">A benchmark is required to run a test.</p>
+                            <p className="text-xs text-yellow-600 mt-1">You can add one for comparison, or proceed without one.</p>
                             <CardButton 
                                 onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD, { projectName: payload.config.projectName })}
                                 className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 mt-2 text-xs py-1 px-3"
                             >
-                                Add Benchmark
+                                Add New Benchmark
                             </CardButton>
                         </div>
                     )}
@@ -799,7 +805,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
                     <p className="text-xs text-gray-500 mt-1">Specify the FTP, SFTP, or local path for batch data processing.</p>
                     <input type="text" id={`batch-path-${messageId}`} value={path} onChange={(e) => setPath(e.target.value)} className="mt-2 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" />
                     <div className="flex justify-end mt-2">
-                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, sopContext: payload.sopContext, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path || !selectedBenchmarkId}>
+                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, sopContext: payload.sopContext, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path}>
                             Start Batch Test
                         </CardButton>
                     </div>
@@ -811,7 +817,7 @@ const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onA
                      <p className="text-xs text-gray-500 mt-1">Upload a single file for immediate testing.</p>
                      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx,.xls,.csv,.pdf,.eml" />
                      <div className="flex justify-end mt-2">
-                        <CardButton onClick={() => fileInputRef.current?.click()} disabled={!selectedBenchmarkId}>
+                        <CardButton onClick={() => fileInputRef.current?.click()}>
                            Upload and Run
                         </CardButton>
                      </div>
