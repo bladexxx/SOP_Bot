@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type, Modality } from '@google/genai';
-import { Flashcard, GeminiModel } from '../types';
+import { Flashcard, GeminiModel, RuleSchema } from '../types';
 
 // This `declare` block informs TypeScript that the `process` object is globally available.
 // Vite's `define` configuration will replace these variables with their actual values
@@ -329,3 +330,79 @@ export const generateSpeechFromText = async (text: string): Promise<string> => {
         throw error;
     }
 };
+
+/**
+ * Generates a JSON schema for a business rule form based on the domain description.
+ * @param domain The business domain (e.g. "Billing").
+ * @param description User intent description (e.g. "Validation rules for high value checks").
+ */
+export const generateRuleSchema = async (domain: string, description: string, modelOverride?: GeminiModel): Promise<RuleSchema> => {
+     if (!geminiApiKey) {
+        throw new Error('API Key missing');
+    }
+
+    const prompt = `
+    You are an expert UI generator.
+    The user wants to manage business rules for the domain "${domain}".
+    User intent/description: "${description}".
+
+    Generate a JSON schema that defines the fields needed for a rule configuration form for this specific scenario.
+    The output must be a valid JSON object matching this structure:
+    {
+      "domain": "${domain}",
+      "fields": [
+        {
+          "key": "unique_field_id",
+          "label": "Human Readable Label",
+          "type": "string" | "number" | "boolean" | "select",
+          "options": ["Option1", "Option2"] // Only if type is 'select'
+          "placeholder": "Example value"
+        }
+      ]
+    }
+    
+    Always include at least a "Rule Name" field.
+    Make the fields specific to the domain description.
+    `;
+
+    const modelToUse = modelOverride || GEMINI_MODEL;
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            domain: { type: Type.STRING },
+            fields: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        key: { type: Type.STRING },
+                        label: { type: Type.STRING },
+                        type: { type: Type.STRING, enum: ["string", "number", "boolean", "select"] },
+                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        placeholder: { type: Type.STRING }
+                    },
+                    required: ["key", "label", "type"]
+                }
+            }
+        },
+        required: ["domain", "fields"]
+    };
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const genAIResponse = await ai.models.generateContent({
+            model: modelToUse,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const jsonString = genAIResponse.text || '{}';
+        return JSON.parse(jsonString) as RuleSchema;
+    } catch (error) {
+        console.error("[AI Service] Error generating rule schema:", error);
+        throw error;
+    }
+}

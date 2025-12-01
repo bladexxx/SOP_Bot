@@ -1,9 +1,9 @@
-
-
 import React, { useState, ChangeEvent, useRef, useMemo, useEffect } from 'react';
-import { Card, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate } from '../types';
-import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon, ThumbsUpIcon, ThumbsDownIcon, ImportIcon, AddDatabaseIcon, UploadIcon } from './Icons';
+import { Card, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, BusinessRule, RuleSchema, BizRuleDomain } from '../types';
+import { CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, LoadingSpinner, BookOpenIcon, HierarchyIcon, PaperclipIcon, FolderIcon, ExternalLinkIcon, LightBulbIcon, ClipboardListIcon, SearchIcon, DatabaseIcon, TemplateIcon, DuplicateIcon, CodeIcon, ThumbsUpIcon, ThumbsDownIcon, ImportIcon, AddDatabaseIcon, UploadIcon, PencilIcon, TrashIcon, MagicWandIcon, SparklesIcon } from './Icons';
 import { SopTimeline } from './SopTimeline';
+import { DynamicForm } from './DynamicForm';
+import { PartCatalogRulesCard } from './PartCatalogRules';
 
 interface CardRendererProps {
   card: Card;
@@ -30,7 +30,6 @@ const EditableJsonTable: React.FC<{
     value: any[];
     onChange: (newValue: any[]) => void;
 }> = ({ value, onChange }) => {
-    // Determine headers from the first object, or handle empty array gracefully
     const headers = value && value.length > 0 ? Object.keys(value[0]) : [];
 
     const handleCellChange = (rowIndex: number, key: string, cellValue: string) => {
@@ -40,7 +39,6 @@ const EditableJsonTable: React.FC<{
     };
 
     const handleAddRow = () => {
-        // Create a new row with the same keys but empty values
         const newRow = headers.reduce((acc, header) => ({ ...acc, [header]: '' }), {});
         onChange([...value, newRow]);
     };
@@ -55,7 +53,6 @@ const EditableJsonTable: React.FC<{
              <div>
                 <p className="text-sm text-gray-500 mb-2">This setting is empty. Add the first item to define its structure.</p>
                 <CardButton onClick={() => {
-                    // Provide a default structure for the 'transformation' setting if it's empty
                     onChange([{ method: '', specFile: '', specDir: '' }]);
                 }} className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-xs py-1 px-3">Add Item</CardButton>
             </div>
@@ -128,12 +125,191 @@ const WelcomeCard: React.FC<{ onAction: CardRendererProps['onAction'] }> = ({ on
                 <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200">
                     <CardButton onClick={() => onAction(ActionType.START_CONFIG)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs">New Config</CardButton>
                     <CardButton onClick={() => onAction(ActionType.START_TEST)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs">Run Test</CardButton>
-                    <CardButton onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs col-span-2">Add Golden Benchmark</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs">Add Golden Benchmark</CardButton>
+                    <CardButton onClick={() => onAction(ActionType.SHOW_BIZ_RULES)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 shadow-sm text-xs">Biz Rule Settings</CardButton>
                 </div>
             </details>
         </div>
     );
 };
+
+const BizRuleDomainSelector: React.FC<{ onAction: CardRendererProps['onAction'], messageId: number }> = ({ onAction, messageId }) => {
+    const domains: BizRuleDomain[] = ['Part Catalog(MDT)', 'ETA(EMT)', 'Billing', 'POCV', 'Vouch'];
+
+    return (
+        <div>
+            <h3 className="font-bold text-lg text-gray-900 flex items-center mb-3">
+                <HierarchyIcon />
+                <span className="ml-2">Select Business Domain</span>
+            </h3>
+            <p className="text-gray-600 mb-3 text-sm">Choose the domain to manage its business rules.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {domains.map(domain => (
+                    <button
+                        key={domain}
+                        onClick={() => onAction(ActionType.SELECT_BIZ_RULE_DOMAIN, { messageId, domain })}
+                        className="p-3 bg-white border border-gray-200 rounded-lg hover:bg-teal-50 hover:border-teal-400 transition-all text-left shadow-sm flex items-center"
+                    >
+                        <div className="bg-teal-100 p-2 rounded-full mr-3 text-teal-800">
+                             <FolderIcon />
+                        </div>
+                        <span className="font-semibold text-gray-800">{domain}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+const GenerativeBizRulesCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const { domain, rules = [], schema: initialSchema } = payload;
+    
+    // States
+    const [mode, setMode] = useState<'INTENT' | 'MANAGE' | 'CREATE'>('INTENT');
+    const [intentText, setIntentText] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [schema, setSchema] = useState<RuleSchema | null>(initialSchema || null);
+    
+    // Filter rules for this domain
+    const domainRules = useMemo(() => {
+        return rules.filter((r: BusinessRule) => r.domain === domain);
+    }, [rules, domain]);
+
+    // If schema provided in payload, jump to MANAGE mode
+    useEffect(() => {
+        if (initialSchema) {
+            setSchema(initialSchema);
+            setMode('MANAGE');
+        }
+    }, [initialSchema]);
+
+    const handleGenerateSchema = () => {
+        if (!intentText) return;
+        setIsGenerating(true);
+        // Dispatch action to App to call AI service
+        onAction(ActionType.GENERATE_RULE_SCHEMA, { messageId, domain, intentText });
+        // NOTE: The App component should update the card payload with the new schema, triggering the useEffect above.
+    };
+
+    const handleCreateRule = (values: Record<string, any>) => {
+        const newRule: BusinessRule = {
+            id: `RULE-${Date.now()}`,
+            domain: domain,
+            payload: values
+        };
+        onAction(ActionType.SAVE_BIZ_RULE, { messageId, rule: newRule });
+        setMode('MANAGE');
+    };
+
+    const handleDeleteRule = (ruleId: string) => {
+        if(confirm('Are you sure you want to delete this rule?')) {
+            onAction(ActionType.DELETE_BIZ_RULE, { messageId, ruleId });
+        }
+    };
+
+    if (isGenerating) {
+        return (
+            <div className="p-8 flex flex-col items-center justify-center text-center">
+                <SparklesIcon className="h-10 w-10 text-teal-600 animate-pulse mb-4"/>
+                <h3 className="font-bold text-lg text-gray-900">Designing UI...</h3>
+                <p className="text-gray-500 mt-2">The AI is generating a custom interface for your rules.</p>
+            </div>
+        )
+    }
+
+    if (mode === 'INTENT') {
+        return (
+            <div>
+                 <h3 className="font-bold text-lg text-gray-900 flex items-center mb-2">
+                    <MagicWandIcon />
+                    <span className="ml-2">Configure {domain} Rules</span>
+                </h3>
+                <p className="text-gray-600 mb-4 text-sm">
+                    Describe the kind of rules you want to manage for <strong>{domain}</strong>. The AI will generate a custom form for you.
+                </p>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Describe Rule Requirements</label>
+                    <textarea 
+                        className="w-full border border-gray-300 rounded-md p-2 focus:ring-teal-500 focus:border-teal-500" 
+                        rows={3} 
+                        placeholder="e.g. I need to validate invoice amounts based on currency and vendor tier."
+                        value={intentText}
+                        onChange={(e) => setIntentText(e.target.value)}
+                    />
+                    <div className="flex justify-end mt-3">
+                         <CardButton onClick={handleGenerateSchema} disabled={!intentText}>
+                            <SparklesIcon className="h-4 w-4 mr-2"/>
+                            Generate UI
+                        </CardButton>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (mode === 'CREATE' && schema) {
+        return (
+            <div>
+                 <h3 className="font-bold text-lg text-gray-900 mb-3">Add New {domain} Rule</h3>
+                 <DynamicForm 
+                    fields={schema.fields} 
+                    onSubmit={handleCreateRule} 
+                    onCancel={() => setMode('MANAGE')} 
+                />
+            </div>
+        );
+    }
+
+    // MANAGE Mode
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-4">
+                 <h3 className="font-bold text-lg text-gray-900 flex items-center">
+                    <ClipboardListIcon />
+                    <span className="ml-2">{domain} Rules</span>
+                </h3>
+                <button onClick={() => setMode('INTENT')} className="text-xs text-teal-600 hover:text-teal-800 underline">Redesign UI</button>
+            </div>
+
+            {domainRules.length === 0 ? (
+                <div className="text-center p-6 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 mb-4">
+                    No rules found for {domain}.
+                </div>
+            ) : (
+                <div className="overflow-x-auto border border-gray-200 rounded-lg mb-4">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                {schema?.fields.slice(0, 3).map(field => (
+                                     <th key={field.key} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{field.label}</th>
+                                ))}
+                                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {domainRules.map((rule: BusinessRule) => (
+                                <tr key={rule.id}>
+                                    {schema?.fields.slice(0, 3).map(field => (
+                                        <td key={`${rule.id}-${field.key}`} className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                            {String(rule.payload[field.key] || '-')}
+                                        </td>
+                                    ))}
+                                    <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
+                                        <button onClick={() => handleDeleteRule(rule.id)} className="text-red-600 hover:text-red-900"><TrashIcon className="h-4 w-4" /></button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+             <div className="flex justify-end">
+                <CardButton onClick={() => setMode('CREATE')}>Add New Rule</CardButton>
+            </div>
+        </div>
+    );
+};
+
 
 const SopChooserCard: React.FC<{ onAction: CardRendererProps['onAction'] }> = ({ onAction }) => {
     const sopCategories = [
@@ -305,1133 +481,605 @@ const ConfigSelectorCard: React.FC<{ payload: any, onAction: CardRendererProps['
 
 const ConfigWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
     const { step = 1, status, data = {} } = payload;
-    const { level, template, clonedData } = data;
+    const { level, template, clonedData, sopContext } = data;
     const isComplete = status === 'complete';
     const isClone = !!clonedData;
     
     const schema = template?.settingsSchema || clonedData?.settings || {};
     const totalSteps = level === 'Vendor' ? 4 : 3;
 
-    // State for form inputs, initialized from payload
-    const [projectName, setProjectName] = useState(data.projectName || '');
-    const [vendorId, setVendorId] = useState(data.vendorId || '');
-    const [settings, setSettings] = useState(data.settings || {});
+    // Local state for form inputs
+    const [localData, setLocalData] = useState<any>(data);
+    const [settings, setSettings] = useState<any>(data.settings || template?.defaultValues || clonedData?.settings || {});
 
-    // Pre-fill from template or clone
-    useEffect(() => {
-        if (template && !data.projectName) {
-            setProjectName(template.projectName);
-            const initialSettings = { ...(template.defaultValues || {}) };
-            setSettings(initialSettings);
-        }
-        if (clonedData && !data.projectName) {
-            setProjectName(clonedData.projectName);
-            setVendorId(clonedData.vendorId || '');
-            setSettings(clonedData.settings || {});
-        }
-    }, [template, clonedData, data.projectName]);
-
+    const handleChange = (field: string, value: any) => {
+        setLocalData((prev: any) => ({ ...prev, [field]: value }));
+    };
+    
     const handleSettingsChange = (key: string, value: any) => {
         setSettings((prev: any) => ({ ...prev, [key]: value }));
     };
-    
-    const handleNext = () => {
-        const basePayload = { messageId, data: { ...data, settings } };
-        if (step === 2) { // Submitting project name
-            onAction(ActionType.SUBMIT_CONFIG_STEP, { ...basePayload, step: 2, data: { ...basePayload.data, projectName } });
-        } else if (step === 3) { // Submitting vendor ID
-            onAction(ActionType.SUBMIT_CONFIG_STEP, { ...basePayload, step: 3, data: { ...basePayload.data, vendorId } });
-        } else if (step === totalSteps) { // Submitting settings
-             onAction(ActionType.SUBMIT_CONFIG_STEP, { ...basePayload, step: totalSteps, data: { ...basePayload.data, settings } });
-        }
-    }
-    
-    const finalStep = (step === 4 || (step === 3 && level==='Project'));
-    const allSettingsFilled = finalStep ? Object.keys(schema).every(key => settings[key] !== undefined && settings[key] !== '') : false;
 
-    // Separate schema fields into simple (for the grid) and complex (for full-width display)
-    const [simpleFields, complexFields] = useMemo(() => {
-        const simple: [string, any][] = [];
-        const complex: [string, any][] = [];
-        Object.entries(schema).forEach(([key, type]) => {
-            if (type === 'json') {
-                complex.push([key, type]);
-            } else {
-                simple.push([key, type]);
-            }
-        });
-        return [simple, complex];
-    }, [schema]);
-
-
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900">Configuration Wizard {isComplete ? '(Completed)' : level ? `(${isClone ? 'Clone' : 'New'} - Step ${step-1}/${totalSteps})` : ''}</h3>
-            {step === 1 && (
-                <div className="mt-2">
-                    <p className="text-sm text-gray-700">What level of configuration do you want to create?</p>
-                    <div className="flex space-x-2 mt-3">
-                         <CardButton onClick={() => onAction(ActionType.SUBMIT_CONFIG_STEP, { messageId, step: 1, data: { ...data, level: 'Project' } })}>
-                            Project Level
-                        </CardButton>
-                        <CardButton onClick={() => onAction(ActionType.SUBMIT_CONFIG_STEP, { messageId, step: 1, data: { ...data, level: 'Vendor' } })}>
-                            Vendor Specific
-                        </CardButton>
-                    </div>
-                </div>
-            )}
-            {step >= 2 && <p className="text-sm text-gray-500 mb-2">Level: <span className="font-semibold text-teal-800">{level}</span></p>}
-            
-            {step === 2 && (
-                <div className="mt-2">
-                    <label htmlFor={`project-name-${messageId}`} className="block text-sm font-medium text-gray-700">Project Name</label>
-                    <input type="text" id={`project-name-${messageId}`} value={projectName} onChange={(e) => setProjectName(e.target.value)} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" placeholder="e.g., Auto-billing" readOnly={isClone}/>
-                </div>
-            )}
-             {step === 3 && level === 'Vendor' && (
-                <div className="mt-2">
-                    <p className="text-gray-700 mb-2">Project: <span className="font-semibold text-gray-800">{data.projectName}</span></p>
-                    <label htmlFor={`vendor-id-${messageId}`} className="block text-sm font-medium text-gray-700">Vendor ID</label>
-                    <input type="text" id={`vendor-id-${messageId}`} value={vendorId} onChange={(e) => setVendorId(e.target.value)} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" placeholder="e.g., VEN-12345"/>
-                </div>
-            )}
-            {finalStep && (
-                 <div className="mt-2 space-y-4">
-                     <p className="text-gray-700 mb-2">Project: <span className="font-semibold text-gray-800">{data.projectName}</span></p>
-                    
-                    {/* Render simple fields in a grid */}
-                    {simpleFields.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                            {simpleFields.map(([key, type]) => {
-                                const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                                const id = `${key}-${messageId}`;
-                                if (type === 'boolean') {
-                                    return (
-                                        <div key={id} className="relative flex items-center col-span-1 py-2">
-                                            <div className="flex items-center h-5">
-                                                <input id={id} type="checkbox" checked={!!settings[key]} onChange={(e) => handleSettingsChange(key, e.target.checked)} className="focus:ring-teal-600 h-4 w-4 text-teal-900 border-gray-300 rounded" />
-                                            </div>
-                                            <div className="ml-3 text-sm">
-                                                <label htmlFor={id} className="font-medium text-gray-700">{label}</label>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-                                return (
-                                    <div key={id} className="col-span-1">
-                                        <label htmlFor={id} className="block text-sm font-medium text-gray-700">{label}</label>
-                                        <input 
-                                            type={type === 'number' ? 'number' : 'text'} 
-                                            id={id} 
-                                            value={settings[key] || ''} 
-                                            onChange={(e) => handleSettingsChange(key, type === 'number' ? parseFloat(e.target.value) : e.target.value)} 
-                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" 
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                     )}
-                     
-                     {/* Render complex fields below the grid */}
-                     {complexFields.length > 0 && (
-                        <div className="space-y-4">
-                            {complexFields.map(([key, type]) => {
-                                const label = formatTitle(key);
-                                const id = `${key}-${messageId}`;
-                                const value = settings[key] || [];
-                                 if (type === 'json' && Array.isArray(value)) {
-                                    return (
-                                        <div key={id}>
-                                            <label className="block text-sm font-medium text-gray-700">{label}</label>
-                                            <div className="mt-1">
-                                                <EditableJsonTable 
-                                                    value={value} 
-                                                    onChange={(newValue) => handleSettingsChange(key, newValue)} 
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                }
-                                // Fallback for non-array JSON - though not used in current templates
-                                return (
-                                    <div key={id}>
-                                        <label htmlFor={id} className="block text-sm font-medium text-gray-700">{label}</label>
-                                        <textarea 
-                                            id={id}
-                                            value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''}
-                                            onChange={(e) => handleSettingsChange(key, e.target.value)}
-                                            rows={5}
-                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 font-mono text-xs focus:outline-none focus:ring-teal-600 focus:border-teal-600"
-                                            placeholder={`Enter a valid JSON for ${label}`}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                     )}
-                 </div>
-            )}
-
-            {step > 1 && (
-                <div className="flex justify-end mt-4">
-                     <CardButton onClick={handleNext} disabled={isComplete || (step === 2 && !projectName) || (step === 3 && level === 'Vendor' && !vendorId) || (finalStep && !allSettingsFilled)}>
-                        {isComplete ? 'Submitted' : finalStep ? 'Submit' : 'Next'}
-                    </CardButton>
-                </div>
-            )}
-        </div>
-    );
-};
-
-
-const ConfigDetailsCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editState, setEditState] = useState<Configuration>(payload);
-
-    const [simpleEditFields, complexEditFields] = useMemo(() => {
-        const simple: string[] = [];
-        const complex: string[] = [];
-        if (editState.settings) {
-            Object.entries(editState.settings).forEach(([key, value]) => {
-                if (typeof value === 'object' && value !== null) {
-                    complex.push(key);
-                } else {
-                    simple.push(key);
-                }
-            });
-        }
-        return [simple, complex];
-    }, [editState.settings]);
-
-    const handleEditClick = () => {
-        const stateForEditing = JSON.parse(JSON.stringify(payload)); // Deep clone
-        setEditState(stateForEditing);
-        setIsEditing(true);
+    const submitStep = () => {
+        const payloadData = { ...localData, settings };
+        onAction(ActionType.SUBMIT_CONFIG_STEP, { step, data: payloadData, messageId });
     };
 
-    const handleCancel = () => {
-        setIsEditing(false);
-        setEditState(payload); // Revert changes
-    };
-
-    const handleSave = () => {
-        onAction(ActionType.UPDATE_CONFIG, {
-            messageId,
-            originalConfig: payload,
-            updatedConfig: { ...editState, lastModified: new Date().toISOString().split('T')[0] },
-        });
-        setIsEditing(false);
-    };
-
-    const handleFieldChange = (key: keyof Configuration, value: any) => {
-        setEditState(prev => ({ ...prev, [key]: value }));
-    };
-
-    const handleSettingsChange = (key: string, value: any) => {
-        setEditState(prev => ({
-            ...prev,
-            settings: {
-                ...prev.settings,
-                [key]: value,
-            },
-        }));
-    };
-
-    if (isEditing) {
-        const settings = editState.settings || {};
-        const commonInputClass = "mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm";
+    if (isComplete) {
         return (
-            <div>
-                <h3 className="font-bold text-lg text-gray-900 mb-3">Editing Configuration</h3>
-                <div className="space-y-4">
-                    {/* Core fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                         <div>
-                            <label htmlFor={`project-name-${messageId}-edit`} className="block text-sm font-medium text-gray-700">Project Name</label>
-                            <input type="text" id={`project-name-${messageId}-edit`} value={editState.projectName} onChange={(e) => handleFieldChange('projectName', e.target.value)} className={commonInputClass} />
-                        </div>
-                         <div>
-                            <label htmlFor={`vendor-id-${messageId}-edit`} className="block text-sm font-medium text-gray-700">Vendor ID (Optional)</label>
-                            <input type="text" id={`vendor-id-${messageId}-edit`} value={editState.vendorId || ''} onChange={(e) => handleFieldChange('vendorId', e.target.value || undefined)} className={commonInputClass} />
-                        </div>
-                        <div>
-                            <label htmlFor={`level-${messageId}-edit`} className="block text-sm font-medium text-gray-700">Level</label>
-                            <select id={`level-${messageId}-edit`} value={editState.level} onChange={(e) => handleFieldChange('level', e.target.value as Configuration['level'])} className={commonInputClass}>
-                                <option value="Project">Project</option>
-                                <option value="Vendor">Vendor</option>
-                            </select>
-                        </div>
-                        <div>
-                             <label htmlFor={`status-${messageId}-edit`} className="block text-sm font-medium text-gray-700">Status</label>
-                             <select id={`status-${messageId}-edit`} value={editState.status} onChange={(e) => handleFieldChange('status', e.target.value as Configuration['status'])} className={commonInputClass}>
-                                <option value="Active">Active</option>
-                                <option value="Paused">Paused</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <h4 className="font-semibold text-gray-700 mb-2 pt-2">Settings</h4>
-                    {/* Simple fields grid */}
-                    {simpleEditFields.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                            {simpleEditFields.map(key => {
-                                const id = `${key}-${messageId}-edit`;
-                                const originalValueType = typeof payload.settings[key];
-                                if (originalValueType === 'boolean') {
-                                    return (
-                                        <div key={id} className="relative flex items-center col-span-1 py-2">
-                                            <div className="flex items-center h-5">
-                                                <input id={id} type="checkbox" checked={!!settings[key]} onChange={(e) => handleSettingsChange(key, e.target.checked)} className="focus:ring-teal-600 h-4 w-4 text-teal-900 border-gray-300 rounded" />
-                                            </div>
-                                            <div className="ml-3 text-sm">
-                                                <label htmlFor={id} className="font-medium text-gray-700">{formatTitle(key)}</label>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-                                return (
-                                    <div key={id} className="col-span-1">
-                                        <label htmlFor={id} className="block text-sm font-medium text-gray-700">{formatTitle(key)}</label>
-                                        <input type={originalValueType === 'number' ? 'number' : 'text'} id={id} value={settings[key] || ''} onChange={(e) => handleSettingsChange(key, originalValueType === 'number' ? parseFloat(e.target.value) : e.target.value)} className={commonInputClass} />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                    {/* Complex fields */}
-                     {complexEditFields.map(key => {
-                        const id = `${key}-${messageId}-edit`;
-                        const value = settings[key] || [];
-                        if (Array.isArray(value)) {
-                             return (
-                                <div key={id}>
-                                    <label className="block text-sm font-medium text-gray-700">{formatTitle(key)}</label>
-                                    <div className="mt-1">
-                                        <EditableJsonTable 
-                                            value={value} 
-                                            onChange={(newValue) => handleSettingsChange(key, newValue)} 
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        }
-                        // Fallback for non-array JSON
-                        return (
-                            <div key={id}>
-                                <label htmlFor={id} className="block text-sm font-medium text-gray-700">{formatTitle(key)}</label>
-                                <textarea id={id} value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''} onChange={(e) => handleSettingsChange(key, e.target.value)} rows={5} className={commonInputClass} />
-                            </div>
-                        );
-                    })}
-                </div>
-                <div className="flex justify-end space-x-2 mt-4">
-                    <CardButton onClick={handleCancel} className="bg-transparent hover:bg-gray-100 text-teal-900 font-semibold">Cancel</CardButton>
-                    <CardButton onClick={handleSave}>Save Changes</CardButton>
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200 text-center">
+                <CheckCircleIcon className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                <h3 className="text-lg font-bold text-green-800">Configuration Created!</h3>
+                <p className="text-green-700 mt-1">
+                    {data.projectName} {data.vendorId ? `(${data.vendorId})` : ''} has been successfully configured.
+                </p>
+                <div className="mt-4 flex justify-center space-x-3">
+                    <CardButton onClick={() => onAction(ActionType.START_TEST, { selectedConfig: data, sopContext })} className="bg-green-700 hover:bg-green-600">Run Verification Test</CardButton>
                 </div>
             </div>
         );
     }
 
-    // Display Mode
-    const { settings = {} } = payload;
-    const simpleSettings = Object.entries(settings).filter(([, value]) => typeof value !== 'object' || value === null);
-    const complexSettings = Object.entries(settings).filter(([, value]) => typeof value === 'object' && value !== null);
-    
     return (
         <div>
-            <h3 className="font-bold text-lg text-gray-900 mb-3">Configuration Details</h3>
-            
-            <div className="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50 divide-y divide-gray-200">
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Project Name</p>
-                    <p className="text-sm text-gray-800 font-semibold">{payload.projectName}</p>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Vendor ID</p>
-                    <p className="text-sm text-gray-800">{payload.vendorId || 'N/A'}</p>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Level</p>
-                    <p className={`text-sm font-semibold ${payload.level === 'Project' ? 'text-teal-800' : 'text-green-700'}`}>{payload.level}</p>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Status</p>
-                    <p className="text-sm text-gray-800">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${payload.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                            {payload.status}
-                        </span>
-                    </p>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Last Modified</p>
-                    <p className="text-sm text-gray-800">{payload.lastModified} by {payload.createdBy}</p>
-                </div>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg text-gray-900">
+                    {isClone ? 'Clone Configuration' : 'New Configuration'}
+                </h3>
+                <span className="text-sm font-medium text-gray-500">Step {step} of {totalSteps}</span>
             </div>
 
-            {simpleSettings.length > 0 && (
-                <div className="mt-4">
-                    <h4 className="font-semibold text-gray-700 mb-2">Settings</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                        {simpleSettings.map(([key, value]) => (
-                            <div key={key}>
-                                <p className="text-sm font-medium text-gray-500">{formatTitle(key)}</p>
-                                <p className="text-sm text-gray-800 font-mono break-all">
-                                    {typeof value === 'boolean' ? (value ? 'Enabled' : 'Disabled') : String(value)}
-                                </p>
-                            </div>
-                        ))}
+            {/* Step 1: Basic Info */}
+            {step === 1 && (
+                <div className="space-y-4">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700">Configuration Level</label>
+                        <div className="mt-1 flex space-x-4">
+                            <label className="inline-flex items-center">
+                                <input type="radio" className="form-radio text-teal-600" name="level" value="Project" checked={localData.level === 'Project'} onChange={() => handleChange('level', 'Project')} />
+                                <span className="ml-2">Project Default</span>
+                            </label>
+                            <label className="inline-flex items-center">
+                                <input type="radio" className="form-radio text-teal-600" name="level" value="Vendor" checked={localData.level === 'Vendor'} onChange={() => handleChange('level', 'Vendor')} />
+                                <span className="ml-2">Vendor Specific</span>
+                            </label>
+                        </div>
                     </div>
-                </div>
-            )}
-
-            {complexSettings.map(([key, value]) => (
-                <div key={key} className="mt-4">
-                    <h4 className="font-semibold text-gray-700 mb-2">{formatTitle(key)}</h4>
-                    {Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' ? (
-                        <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-slate-200">
-                                    <tr>
-                                        {Object.keys(value[0]).map(header => (
-                                            <th key={header} scope="col" className="px-3 py-1.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                                {formatTitle(header)}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {value.map((row, rowIndex) => (
-                                        <tr key={rowIndex} className="hover:bg-gray-50">
-                                            {Object.values(row).map((cell: any, cellIndex) => (
-                                                <td key={cellIndex} className="px-3 py-1.5 whitespace-nowrap text-xs text-gray-800 font-mono">
-                                                    {String(cell)}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                            <pre className="p-2 bg-gray-100 rounded-md text-xs text-gray-600 overflow-x-auto">
-                                <code>{JSON.stringify(value, null, 2)}</code>
-                            </pre>
-                        </div>
-                    )}
-                </div>
-            ))}
-            <div className="flex justify-end mt-4">
-                <CardButton onClick={handleEditClick} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm">
-                    Edit Configuration
-                </CardButton>
-            </div>
-        </div>
-    );
-};
-
-const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number, allBenchmarks: BenchmarkDataset[] }> = ({ payload, onAction, messageId, allBenchmarks }) => {
-    const [path, setPath] = useState('ftp://data.example.com/incoming/batch_001/');
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const relevantBenchmarks = useMemo(() => {
-        if (!payload.config || !allBenchmarks) return [];
-        return allBenchmarks.filter(b => b.projectName === payload.config.projectName);
-    }, [allBenchmarks, payload.config]);
-
-    const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | undefined>(undefined);
-
-    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files && event.target.files[0]) {
-            const file = event.target.files[0];
-            onAction(ActionType.RUN_TEST_WITH_FILE, { messageId, file, sopContext: payload.sopContext, benchmarkId: selectedBenchmarkId, config: payload.config });
-        }
-    };
-
-    const handleBenchmarkChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const value = e.target.value;
-        if (value === 'add_new_benchmark') {
-            onAction(ActionType.SHOW_BENCHMARK_WIZARD, { projectName: payload.config.projectName });
-            // Reset selection to 'None' after triggering the action, providing a consistent state
-            setSelectedBenchmarkId(undefined);
-        } else {
-            setSelectedBenchmarkId(value || undefined);
-        }
-    };
-    
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900">Start a New Test</h3>
-            {payload.config && <p className="text-sm text-gray-500 -mt-1 mb-2">For Configuration: <span className="font-semibold text-teal-800">{payload.config.projectName} {payload.config.vendorId || ''}</span></p>}
-            
-            {payload.config && (
-                <div className="mt-4">
-                    <label htmlFor={`benchmark-selector-${messageId}`} className="block text-sm font-medium text-gray-700 flex items-center mb-2">
-                        <DatabaseIcon /><span className="ml-2">Target Benchmark Dataset (Optional)</span>
-                    </label>
-                    {relevantBenchmarks.length > 0 ? (
-                        <select
-                            id={`benchmark-selector-${messageId}`}
-                            value={selectedBenchmarkId || ''}
-                            onChange={handleBenchmarkChange}
-                            className="w-full bg-white text-gray-800 placeholder-gray-400 border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                        >
-                            <option value="">None (run without comparison)</option>
-                            {relevantBenchmarks.map(b => <option key={b.id} value={b.id}>{b.id} ({b.description.substring(0, 30)}...)</option>)}
-                             <option value="add_new_benchmark" className="font-semibold text-teal-700 bg-gray-100 border-t-2 border-gray-200 mt-2">-- Add New Benchmark --</option>
-                        </select>
-                    ) : (
-                        <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-md text-center">
-                            <p className="text-sm text-yellow-700">No Golden Benchmarks found for project '{payload.config.projectName}'.</p>
-                            <p className="text-xs text-yellow-600 mt-1">You can add one for comparison, or proceed without one.</p>
-                            <CardButton 
-                                onClick={() => onAction(ActionType.SHOW_BENCHMARK_WIZARD, { projectName: payload.config.projectName })}
-                                className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 mt-2 text-xs py-1 px-3"
-                            >
-                                Add New Benchmark
-                            </CardButton>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Project Name</label>
+                        <input 
+                            type="text" 
+                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-teal-500 focus:border-teal-500 sm:text-sm"
+                            value={localData.projectName || ''}
+                            onChange={(e) => handleChange('projectName', e.target.value)}
+                            placeholder="e.g., Auto-billing"
+                        />
+                    </div>
+                    {localData.level === 'Vendor' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Vendor ID</label>
+                            <input 
+                                type="text" 
+                                className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-teal-500 focus:border-teal-500 sm:text-sm"
+                                value={localData.vendorId || ''}
+                                onChange={(e) => handleChange('vendorId', e.target.value)}
+                                placeholder="e.g., VEN-12345"
+                            />
                         </div>
                     )}
                 </div>
             )}
-            
-            <p className="text-gray-600 mt-4">Choose how you want to provide data for this test run.</p>
-            
-            <div className="mt-4 space-y-4">
-                {/* Batch Test */}
-                <div className="p-3 border border-gray-200 rounded-lg">
-                    <label htmlFor={`batch-path-${messageId}`} className="block text-sm font-medium text-gray-700 flex items-center"><FolderIcon /><span className="ml-2">Run Batch Test</span></label>
-                    <p className="text-xs text-gray-500 mt-1">Specify the FTP, SFTP, or local path for batch data processing.</p>
-                    <input type="text" id={`batch-path-${messageId}`} value={path} onChange={(e) => setPath(e.target.value)} className="mt-2 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm" />
-                    <div className="flex justify-end mt-2">
-                        <CardButton onClick={() => onAction(ActionType.START_BATCH_TEST, { path, sopContext: payload.sopContext, messageId, benchmarkId: selectedBenchmarkId, config: payload.config })} disabled={!path}>
-                            Start Batch Test
-                        </CardButton>
-                    </div>
-                </div>
 
-                {/* Single File Test */}
-                <div className="p-3 border border-gray-200 rounded-lg">
-                     <h4 className="text-sm font-medium text-gray-700 flex items-center"><PaperclipIcon /><span className="ml-2">Run with Single File</span></h4>
-                     <p className="text-xs text-gray-500 mt-1">Upload a single file for immediate testing.</p>
-                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx,.xls,.csv,.pdf,.eml" />
-                     <div className="flex justify-end mt-2">
-                        <CardButton onClick={() => fileInputRef.current?.click()}>
-                           Upload and Run
-                        </CardButton>
-                     </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const TestResultsSummaryCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => (
-    <div>
-        <h3 className="font-bold text-lg text-gray-900">Test Results: {payload.project}</h3>
-
-        {payload.benchmarkId && (
-            <div className="mt-3 p-2 bg-gray-50 rounded-md border border-gray-200 flex justify-between items-center">
-                <div>
-                    <p className="text-xs text-gray-500">Verified Against Benchmark</p>
-                    <p className="font-semibold text-teal-600">{payload.benchmarkId}</p>
-                </div>
-                <button 
-                    onClick={() => onAction(ActionType.VIEW_BENCHMARK_DETAILS, { benchmarkId: payload.benchmarkId })}
-                    className="text-sm text-teal-800 hover:text-teal-700 font-medium flex items-center"
-                >
-                    View Details <ExternalLinkIcon />
-                </button>
-            </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 mt-3 text-center">
-            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                <p className="text-xl font-bold text-green-600">{payload.matched}</p>
-                <p className="text-sm text-gray-600">Matched</p>
-            </div>
-             <div className="bg-red-50 p-3 rounded-lg border border-red-200">
-                <p className="text-xl font-bold text-red-600">{payload.mismatched}</p>
-                <p className="text-sm text-gray-600">Mismatched</p>
-            </div>
-        </div>
-        <div className="flex space-x-2 mt-4">
-            <CardButton onClick={() => onAction(ActionType.DOWNLOAD_REPORT)} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm">Download Report</CardButton>
-            <CardButton onClick={() => onAction(ActionType.TRIGGER_ANALYSIS, { testId: payload.testId, sopContext: payload.sopContext, messageId })}>Analyze Discrepancies</CardButton>
-        </div>
-    </div>
-);
-
-const AnalysisResultsCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const [feedbackGiven, setFeedbackGiven] = useState(payload.feedbackGiven || false);
-
-    const handleFeedback = (isGood: boolean) => {
-        setFeedbackGiven(true); // Optimistic UI update
-        onAction(ActionType.ANALYSIS_FEEDBACK, { messageId, isGood });
-    };
-
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900">Discrepancy Analysis</h3>
-            <ul className="mt-2 space-y-2">
-                <li className="flex items-center space-x-2 p-2 bg-gray-100/50 rounded-md">
-                    <XCircleIcon />
-                    <span className="text-gray-700 flex-grow">Data Quality Issues</span>
-                    <span className="font-semibold text-gray-800">{payload.dataQuality}</span>
-                </li>
-                <li className="flex items-center space-x-2 p-2 bg-gray-100/50 rounded-md">
-                    <ExclamationCircleIcon />
-                    <span className="text-gray-700 flex-grow">Configuration/Logic Problems</span>
-                    <span className="font-semibold text-gray-800">{payload.logic}</span>
-                </li>
-            </ul>
-            <div className="flex space-x-2 mt-4">
-                <CardButton onClick={() => onAction(ActionType.VIEW_METABASE_REPORT)} className="bg-slate-600 hover:bg-slate-700 text-white">View on Metabase <ExternalLinkIcon /></CardButton>
-                <CardButton onClick={() => onAction(ActionType.INVESTIGATE_ROOT_CAUSE, { testId: payload.testId, sopContext: payload.sopContext, messageId })}>Find Root Cause & Suggestions</CardButton>
-            </div>
-            {/* Feedback Section */}
-            <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end items-center space-x-3">
-                {feedbackGiven ? (
-                     <p className="text-xs text-gray-500 italic">Thank you for your feedback!</p>
-                ) : (
-                    <>
-                        <span className="text-sm text-gray-500">Was this analysis helpful?</span>
-                        <button onClick={() => handleFeedback(true)} className="text-gray-400 hover:text-green-500 transition-colors" aria-label="Good analysis">
-                            <ThumbsUpIcon />
-                        </button>
-                        <button onClick={() => handleFeedback(false)} className="text-gray-400 hover:text-red-500 transition-colors" aria-label="Bad analysis">
-                            <ThumbsDownIcon />
-                        </button>
-                    </>
-                )}
-            </div>
-        </div>
-    );
-};
-
-const RootCauseAnalysisCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const [feedbackGiven, setFeedbackGiven] = useState(payload.feedbackGiven || false);
-
-    const handleFeedback = (isGood: boolean) => {
-        setFeedbackGiven(true); // Optimistic UI update
-        onAction(ActionType.ROOT_CAUSE_FEEDBACK, { messageId, isGood });
-    };
-
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900 flex items-center"><LightBulbIcon /><span className="ml-2">Root Cause Analysis</span></h3>
-            <div className="mt-3 p-3 bg-gray-100 rounded-md">
-                <p className="text-sm text-gray-700">
-                    <span className="font-semibold text-yellow-600">Probable Cause: </span>
-                    {payload.cause}
-                </p>
-            </div>
-            <div className="mt-4">
-                <h4 className="font-semibold text-gray-800">Suggested Actions</h4>
-                <div className="mt-2 space-y-2">
-                    {payload.suggestedActions.map((action: {title: string, action: string}) => (
-                        <CardButton key={action.action} onClick={() => onAction(ActionType.SUGGESTED_ACTION, { action: action.action, title: action.title })} className="w-full bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm justify-start">
-                            {action.title}
-                        </CardButton>
+            {/* Step 2: Settings (Dynamic based on Schema) */}
+            {step === 2 && (
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-500">Configure the business rules and settings for this project.</p>
+                    {Object.entries(schema).map(([key, type]) => (
+                        <div key={key}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{formatTitle(key)}</label>
+                            {type === 'boolean' ? (
+                                <div className="flex items-center">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={!!settings[key]} 
+                                        onChange={(e) => handleSettingsChange(key, e.target.checked)}
+                                        className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                    />
+                                    <span className="ml-2 text-sm text-gray-600">{settings[key] ? 'Enabled' : 'Disabled'}</span>
+                                </div>
+                            ) : type === 'json' ? (
+                                <EditableJsonTable 
+                                    value={Array.isArray(settings[key]) ? settings[key] : []} 
+                                    onChange={(val) => handleSettingsChange(key, val)}
+                                />
+                            ) : (
+                                <input 
+                                    type={type === 'number' ? 'number' : 'text'}
+                                    className="block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-teal-500 focus:border-teal-500 sm:text-sm"
+                                    value={settings[key] || ''}
+                                    onChange={(e) => handleSettingsChange(key, type === 'number' ? parseFloat(e.target.value) : e.target.value)}
+                                />
+                            )}
+                        </div>
                     ))}
                 </div>
-            </div>
-            {/* Feedback Section */}
-            <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end items-center space-x-3">
-                {feedbackGiven ? (
-                     <p className="text-xs text-gray-500 italic">Thank you for your feedback!</p>
-                ) : (
-                    <>
-                        <span className="text-sm text-gray-500">Was this helpful?</span>
-                        <button onClick={() => handleFeedback(true)} className="text-gray-400 hover:text-green-500 transition-colors" aria-label="Good analysis">
-                            <ThumbsUpIcon />
-                        </button>
-                        <button onClick={() => handleFeedback(false)} className="text-gray-400 hover:text-red-500 transition-colors" aria-label="Bad analysis">
-                            <ThumbsDownIcon />
-                        </button>
-                    </>
-                )}
-            </div>
-        </div>
-    );
-};
+            )}
 
-
-const InteractiveDiagnosticCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => (
-     <div>
-        <h3 className="font-bold text-lg text-gray-900">Interactive Diagnostic: {payload.recordId}</h3>
-        <div className="mt-2 p-3 bg-gray-100 rounded-md font-mono text-xs text-gray-600 overflow-x-auto">
-            <pre>{JSON.stringify(payload.data, null, 2)}</pre>
-        </div>
-        {payload.status === 'resolved' ? (
-             <div className="mt-4 flex items-center space-x-2 text-green-600">
-                <CheckCircleIcon />
-                <span>Rerun successful: Record now matches.</span>
-            </div>
-        ) : payload.status === 'running' ? (
-             <div className="mt-4 flex items-center space-x-2 text-teal-800">
-                <LoadingSpinner />
-                <span>Rerunning with new parameters...</span>
-            </div>
-        ) : (
-            <div className="flex space-x-2 mt-4">
-                <CardButton onClick={() => onAction(ActionType.RERUN_DIAGNOSTIC, { messageId, ruleToDisable: 'RULE-005', sopContext: payload.sopContext })}>Rerun (Disable RULE-005)</CardButton>
-            </div>
-        )}
-    </div>
-);
-
-const ConfirmationCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => (
-    <div>
-        <h3 className="font-bold text-lg text-yellow-600 flex items-center"><ExclamationCircleIcon /> <span className="ml-2">Confirm Action</span></h3>
-        <p className="text-gray-700 mt-2">
-            You are about to <span className="font-bold text-red-600">{payload.action}</span> for project <span className="font-bold text-gray-800">{payload.project}</span>.
-            This is a production environment. Are you sure you want to proceed?
-        </p>
-        <div className="flex justify-end space-x-2 mt-4">
-            <CardButton onClick={() => onAction(ActionType.CANCEL_ACTION, { messageId })} className="bg-transparent hover:bg-gray-100 text-teal-900 font-semibold">Cancel</CardButton>
-            <CardButton onClick={() => onAction(ActionType.CONFIRM_PAUSE_PRODUCTION, { messageId, project: payload.project })} className="bg-red-600 hover:bg-red-700 text-white">Confirm {payload.action}</CardButton>
-        </div>
-    </div>
-);
-
-const AlertCard: React.FC<{ payload: any }> = ({ payload }) => (
-    <div>
-        <h3 className="font-bold text-lg text-red-600 flex items-center"><ExclamationCircleIcon /> <span className="ml-2">Production Alert</span></h3>
-        <p className="text-gray-700 mt-2">{payload.message}</p>
-        <div className="mt-2 p-3 bg-gray-100 rounded-md font-mono text-xs text-gray-600">
-            Project: {payload.project}<br/>
-            Severity: {payload.severity}
-        </div>
-    </div>
-);
-
-const FileUploadCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files && event.target.files[0]) {
-            const file = event.target.files[0];
-            onAction(ActionType.UPLOAD_FILE, { messageId, file, sopContext: payload.sopContext });
-        }
-    };
-
-    const handleClick = () => {
-        fileInputRef.current?.click();
-    };
-
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900">Upload File</h3>
-            {payload.status === 'idle' && (
-                <>
-                    <p className="text-gray-600 mt-1">Please upload the data file for processing.</p>
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        className="hidden"
-                        accept=".xlsx,.xls,.csv,.pdf,.eml"
-                    />
-                    <div className="mt-4">
-                        <CardButton onClick={handleClick}>Select File</CardButton>
+             {/* Step 3: Review */}
+            {step === (localData.level === 'Vendor' ? 4 : 3) && (
+                <div className="space-y-3">
+                     <div className="bg-gray-50 p-3 rounded-md border border-gray-200">
+                        <h4 className="font-bold text-sm text-gray-700 border-b border-gray-200 pb-1 mb-2">Summary</h4>
+                        <p className="text-sm"><span className="font-medium">Project:</span> {localData.projectName}</p>
+                        <p className="text-sm"><span className="font-medium">Level:</span> {localData.level}</p>
+                        {localData.vendorId && <p className="text-sm"><span className="font-medium">Vendor ID:</span> {localData.vendorId}</p>}
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                             <p className="text-sm font-medium mb-1">Settings Configured:</p>
+                             <ul className="text-xs text-gray-600 list-disc pl-4">
+                                {Object.keys(settings).slice(0, 5).map(k => (
+                                    <li key={k}>{formatTitle(k)}: {typeof settings[k] === 'object' ? '[Complex Data]' : String(settings[k])}</li>
+                                ))}
+                                {Object.keys(settings).length > 5 && <li>...and {Object.keys(settings).length - 5} more</li>}
+                             </ul>
+                        </div>
                     </div>
-                </>
-            )}
-             {payload.status === 'uploading' && (
-                <div className="mt-4 flex items-center space-x-2 text-teal-800">
-                    <LoadingSpinner />
-                    <span>Uploading {payload.fileName}...</span>
                 </div>
             )}
-            {payload.status === 'processing' && (
-                <div className="mt-4 flex items-center space-x-2 text-teal-800">
-                    <LoadingSpinner />
-                    <span>Processing file...</span>
-                </div>
-            )}
-            {payload.status === 'complete' && (
-                <div className="mt-4 flex items-center space-x-2 text-green-600">
-                    <CheckCircleIcon />
-                    <span>{payload.result}</span>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const BenchmarkListCard: React.FC<{ payload: BenchmarkDataset, onAction: CardRendererProps['onAction'] }> = ({ payload, onAction }) => {
-    const [vendorQuery, setVendorQuery] = useState('');
-    const [checkResult, setCheckResult] = useState<{ covered: boolean; vendorId: string } | null>(null);
-
-    const handleCheck = () => {
-        if (!vendorQuery) return;
-        const isCovered = payload.coveredVendors.some(v => v.toLowerCase() === vendorQuery.toLowerCase());
-        setCheckResult({ covered: isCovered, vendorId: vendorQuery });
-    };
-
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900 flex items-center"><DatabaseIcon /><span className="ml-2">Golden Benchmark: {payload.projectName}</span></h3>
-            <p className="text-sm text-gray-500 mt-1 italic">{payload.description}</p>
             
-            <div className="mt-3 space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50/50 divide-y divide-gray-200">
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Data Volume</p>
-                    <p className="text-sm text-gray-800 font-semibold">{payload.dataVolume.toLocaleString()} Records</p>
-                </div>
-                 <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Vendor Coverage</p>
-                    <p className="text-sm text-gray-800 font-semibold">{payload.vendorCount} Vendors</p>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                    <p className="text-sm font-medium text-gray-500">Timeliness</p>
-                    <p className="text-sm text-gray-800 font-semibold">{payload.timeliness}</p>
-                </div>
-            </div>
-
-            <div className="mt-3">
-                 <CardButton onClick={() => onAction(ActionType.VIEW_BENCHMARK_ON_METABASE, { benchmarkId: payload.id })} className="w-full bg-teal-700 hover:bg-teal-800 text-white">
-                    View Full Dashboard on Metabase <ExternalLinkIcon />
-                </CardButton>
-            </div>
-
-            <div className="mt-4">
-                <h4 className="font-semibold text-gray-700 mb-2">Check Vendor Coverage</h4>
-                <div className="flex items-center space-x-2">
-                    <input
-                        type="text"
-                        placeholder="Enter Vendor ID..."
-                        value={vendorQuery}
-                        onChange={(e) => setVendorQuery(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleCheck()}
-                        className="flex-grow bg-white text-gray-800 placeholder-gray-400 border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-1 focus:ring-teal-600 sm:text-sm"
-                    />
-                    <CardButton onClick={handleCheck} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm" disabled={!vendorQuery}>
-                        Check
+            <div className="mt-6 flex justify-between">
+                {step > 1 && (
+                    <button 
+                        onClick={() => onAction(ActionType.SUBMIT_CONFIG_STEP, { step: step - 1, data: { ...localData, settings }, messageId })}
+                        className="text-gray-600 hover:text-gray-900 font-medium text-sm"
+                    >
+                        Back
+                    </button>
+                )}
+                <div className="ml-auto">
+                    <CardButton onClick={submitStep}>
+                        {step === (localData.level === 'Vendor' ? 4 : 3) ? 'Create Configuration' : 'Next Step'}
                     </CardButton>
                 </div>
-                {checkResult && (
-                    <div className="mt-2 text-sm flex items-center">
-                        {checkResult.covered ? (
-                            <>
-                                <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
-                                <span className="text-green-700">Vendor <span className="font-bold">{checkResult.vendorId}</span> is covered.</span>
-                            </>
-                        ) : (
-                             <>
-                                <XCircleIcon className="h-5 w-5 text-red-500 mr-2" />
-                                <span className="text-red-700">Vendor <span className="font-bold">{checkResult.vendorId}</span> is not covered.</span>
-                            </>
-                        )}
-                    </div>
-                )}
             </div>
         </div>
     );
 };
 
-const JsonImporterCard: React.FC<{ onAction: CardRendererProps['onAction'], messageId: number }> = ({ onAction, messageId }) => {
-    const [jsonString, setJsonString] = useState('');
+const ConfigDetailsCard: React.FC<{ payload: any }> = ({ payload }) => (
+    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg text-teal-900 mb-2">{payload.projectName}</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+            <div>
+                <span className="block text-gray-500 text-xs">Level</span>
+                <span className="font-medium">{payload.level}</span>
+            </div>
+            <div>
+                 <span className="block text-gray-500 text-xs">Status</span>
+                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${payload.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    {payload.status}
+                </span>
+            </div>
+            {payload.vendorId && (
+                <div>
+                    <span className="block text-gray-500 text-xs">Vendor ID</span>
+                    <span className="font-medium">{payload.vendorId}</span>
+                </div>
+            )}
+            <div>
+                 <span className="block text-gray-500 text-xs">Last Modified</span>
+                 <span className="font-medium">{payload.lastModified}</span>
+            </div>
+        </div>
+        <div className="border-t border-gray-100 pt-3">
+            <p className="text-xs font-semibold text-gray-500 mb-2">Settings Preview</p>
+            <div className="bg-gray-50 p-2 rounded text-xs font-mono text-gray-700 overflow-x-auto">
+                {JSON.stringify(payload.settings, null, 2)}
+            </div>
+        </div>
+    </div>
+);
+
+const JsonImporterCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [jsonText, setJsonText] = useState('');
     const [error, setError] = useState('');
 
     const handleImport = () => {
-        if (!jsonString.trim()) {
-            setError('JSON input cannot be empty.');
-            return;
-        }
         try {
-            // Sanitize input: attempt to remove common errors like trailing commas
-            const sanitizedJsonString = jsonString.replace(/,\s*([}\]])/g, '$1');
-            
-            JSON.parse(sanitizedJsonString); // Validate the sanitized string
+            JSON.parse(jsonText);
             setError('');
-            // Pass the sanitized (and now validated) string to the action handler
-            onAction(ActionType.IMPORT_JSON_CONFIG, { messageId, jsonString: sanitizedJsonString });
+            onAction(ActionType.IMPORT_JSON_CONFIG, { jsonString: jsonText, messageId, sopContext: payload?.sopContext });
         } catch (e) {
-            setError('Invalid JSON format. Please check for syntax errors.');
+            setError('Invalid JSON format. Please check your input.');
         }
     };
 
+    if (payload.status === 'imported') {
+         return <div className="p-4 bg-green-50 text-green-800 rounded-lg">JSON imported successfully.</div>;
+    }
+
     return (
         <div>
-            <h3 className="font-bold text-lg text-gray-900 flex items-center"><ImportIcon /><span className="ml-2">Import Configuration from JSON</span></h3>
-            <p className="text-gray-600 mt-1">Paste your raw JSON configuration below. The tool will convert it into a bot-managed configuration and auto-generate a corresponding template.</p>
-            <div className="mt-4">
-                <textarea
-                    value={jsonString}
-                    onChange={(e) => setJsonString(e.target.value)}
-                    placeholder='{ "yourKey": "yourValue", ... }'
-                    rows={10}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-gray-800 font-mono text-sm focus:outline-none focus:ring-teal-600 focus:border-teal-600"
-                />
-                {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
-            </div>
-            <div className="flex justify-end mt-3">
-                <CardButton onClick={handleImport}>Import and Generate</CardButton>
+            <h3 className="font-bold text-gray-900 mb-2">Import JSON Configuration</h3>
+            <p className="text-sm text-gray-600 mb-3">Paste your configuration JSON below. This will automatically generate a config and a reusable template.</p>
+            <textarea
+                className="w-full h-40 p-2 border border-gray-300 rounded-md font-mono text-xs focus:ring-teal-500 focus:border-teal-500"
+                placeholder='{ "threshold": 100, "autoApprove": true ... }'
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+            />
+            {error && <p className="text-red-600 text-xs mt-1">{error}</p>}
+            <div className="mt-3 flex justify-end">
+                <CardButton onClick={handleImport} disabled={!jsonText}>Import JSON</CardButton>
             </div>
         </div>
     );
 };
 
 const TemplateEditorCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
-    const [template, setTemplate] = useState(payload.template);
-    const [isSaved, setIsSaved] = useState(payload.isSaved || false);
-
-    const handleSave = () => {
-        onAction(ActionType.SAVE_GENERATED_TEMPLATE, { messageId, template });
-        setIsSaved(true);
-    };
+    const { template, isSaved } = payload;
     
-    return (
-        <div>
-            <h3 className="font-bold text-lg text-gray-900 flex items-center"><TemplateIcon /><span className="ml-2">Generated Template Editor</span></h3>
-            <p className="text-gray-600 mt-1">A template has been generated from your JSON. Review and save it to the library.</p>
-            
-            <div className="mt-4 space-y-3">
-                <div>
-                    <label htmlFor={`template-name-${messageId}`} className="block text-sm font-medium text-gray-700">Template Name</label>
-                    <input 
-                        type="text" 
-                        id={`template-name-${messageId}`} 
-                        value={template.templateName} 
-                        onChange={(e) => setTemplate({ ...template, templateName: e.target.value })}
-                        className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 sm:text-sm" 
-                        disabled={isSaved}
-                    />
-                </div>
-                <div>
-                    <label htmlFor={`template-desc-${messageId}`} className="block text-sm font-medium text-gray-700">Description</label>
-                    <textarea 
-                        id={`template-desc-${messageId}`} 
-                        value={template.description} 
-                        onChange={(e) => setTemplate({ ...template, description: e.target.value })}
-                        rows={2}
-                        className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 sm:text-sm" 
-                        disabled={isSaved}
-                    />
-                </div>
-                <div>
-                    <h4 className="text-sm font-medium text-gray-700">Inferred Schema</h4>
-                    <div className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded-md text-xs font-mono text-gray-500 space-y-1">
-                        {Object.entries(template.settingsSchema).map(([key, value]) => (
-                            <div key={key}><span className="text-sky-600">{key}</span>: <span className="text-yellow-600">{`"${value}"`}</span></div>
-                        ))}
-                    </div>
-                </div>
-            </div>
+    if (isSaved) {
+         return <div className="p-4 bg-green-50 text-green-800 rounded-lg">Template "{template.templateName}" saved to library.</div>;
+    }
 
-            <div className="flex justify-end mt-4">
-                {isSaved ? (
-                     <div className="flex items-center space-x-2 text-green-600 font-semibold">
-                        <CheckCircleIcon />
-                        <span>Template Saved!</span>
+    return (
+        <div className="mt-4 border-t border-gray-200 pt-4">
+             <h3 className="font-bold text-gray-900 mb-2 flex items-center"><MagicWandIcon /><span className="ml-2">Review Generated Template</span></h3>
+             <div className="space-y-3">
+                 <div>
+                     <label className="block text-xs font-medium text-gray-500">Template Name</label>
+                     <input type="text" readOnly value={template.templateName} className="w-full bg-gray-100 border border-gray-300 rounded p-1 text-sm text-gray-700"/>
+                 </div>
+                 <div>
+                     <label className="block text-xs font-medium text-gray-500">Detected Schema</label>
+                     <div className="bg-gray-50 p-2 rounded border border-gray-200 text-xs font-mono">
+                         {JSON.stringify(template.settingsSchema, null, 2)}
                      </div>
-                ) : (
-                    <CardButton onClick={handleSave} disabled={!template.templateName || !template.description}>
-                        Save Template
-                    </CardButton>
-                )}
+                 </div>
+             </div>
+             <div className="mt-3 flex justify-end">
+                 <CardButton onClick={() => onAction(ActionType.SAVE_GENERATED_TEMPLATE, { template, messageId })}>Save Template</CardButton>
+             </div>
+        </div>
+    );
+};
+
+const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const [data, setData] = useState<Partial<BenchmarkDataset>>({
+        projectName: payload.projectName || '',
+        dataVolume: 0,
+        vendorCount: 0,
+        timeliness: 'Last 3 Months',
+        coveredVendors: []
+    });
+
+    if (payload.isSaved) {
+        return null; 
+    }
+
+    const handleSubmit = () => {
+        const newBenchmark: BenchmarkDataset = {
+            id: `BM-${Date.now().toString().slice(-4)}`,
+            projectName: data.projectName!,
+            description: data.description || 'User created benchmark',
+            dataVolume: Number(data.dataVolume),
+            vendorCount: Number(data.vendorCount),
+            timeliness: data.timeliness as any,
+            coveredVendors: typeof data.coveredVendors === 'string' ? (data.coveredVendors as string).split(',').map((s: string) => s.trim()) : []
+        };
+        onAction(ActionType.SUBMIT_BENCHMARK_WIZARD, { benchmark: newBenchmark, messageId });
+    };
+
+    return (
+        <div className="space-y-3">
+            <h3 className="font-bold text-gray-900">Add Golden Benchmark</h3>
+            <div>
+                <label className="block text-sm font-medium text-gray-700">Project Name</label>
+                <input type="text" className="w-full border border-gray-300 rounded p-1.5 text-sm" value={data.projectName} onChange={e => setData({...data, projectName: e.target.value})} />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <input type="text" className="w-full border border-gray-300 rounded p-1.5 text-sm" value={data.description || ''} onChange={e => setData({...data, description: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                     <label className="block text-sm font-medium text-gray-700">Volume</label>
+                     <input type="number" className="w-full border border-gray-300 rounded p-1.5 text-sm" value={data.dataVolume} onChange={e => setData({...data, dataVolume: parseInt(e.target.value)})} />
+                </div>
+                 <div>
+                     <label className="block text-sm font-medium text-gray-700">Vendor Count</label>
+                     <input type="number" className="w-full border border-gray-300 rounded p-1.5 text-sm" value={data.vendorCount} onChange={e => setData({...data, vendorCount: parseInt(e.target.value)})} />
+                </div>
+            </div>
+            <div className="flex justify-end pt-2">
+                <CardButton onClick={handleSubmit}>Save Benchmark</CardButton>
             </div>
         </div>
     );
 };
 
-const BenchmarkWizardCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number, allConfigs?: Configuration[] }> = ({ payload, onAction, messageId, allConfigs = [] }) => {
-    const [benchmark, setBenchmark] = useState<Partial<BenchmarkDataset>>({});
-    const [vendors, setVendors] = useState('');
-    const [error, setError] = useState('');
-    const [isSaved, setIsSaved] = useState(payload?.isSaved || false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+const BenchmarkListCard: React.FC<{ payload: BenchmarkDataset }> = ({ payload }) => (
+    <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm mb-2">
+        <div className="flex justify-between items-start">
+            <div>
+                <h4 className="font-bold text-teal-800 text-sm">{payload.id}</h4>
+                <p className="text-xs text-gray-500">{payload.projectName}</p>
+            </div>
+            <div className="bg-blue-50 text-blue-800 text-xs px-2 py-0.5 rounded font-medium">{payload.timeliness}</div>
+        </div>
+        <p className="text-sm text-gray-700 mt-2">{payload.description}</p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+            <div><span className="font-semibold">Volume:</span> {payload.dataVolume.toLocaleString()}</div>
+            <div><span className="font-semibold">Vendors:</span> {payload.vendorCount}</div>
+        </div>
+    </div>
+);
 
-    // This effect ensures the component's state is synchronized with the payload from App.tsx
-    // This is important for when the card is re-rendered after a save action.
-    useEffect(() => {
-        setIsSaved(payload?.isSaved || false);
-        setBenchmark(payload?.benchmark || {
-            projectName: payload?.projectName || '',
-            timeliness: 'Last 3 Months',
-        });
-        setVendors((payload?.benchmark?.coveredVendors || []).join(', '));
-    }, [payload]);
-
-    const projectNames = useMemo(() => {
-        const uniqueNames = new Set(allConfigs.map(c => c.projectName));
-        return Array.from(uniqueNames).sort();
-    }, [allConfigs]);
-
-    // Effect to set a default project name if the list is available and none is set
-    useEffect(() => {
-        if (!benchmark.projectName && projectNames.length > 0) {
-            setBenchmark(prev => ({ ...prev, projectName: projectNames[0] }));
-        }
-    }, [projectNames, benchmark.projectName]);
-
-
-    const handleChange = (field: keyof BenchmarkDataset, value: any) => {
-        setBenchmark(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleVendorFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target?.result as string;
-            if (text) {
-                // Handle CSV (comma-separated) and TXT (newline-separated)
-                const vendorsArray = text
-                    .replace(/\r\n/g, '\n') // Standardize newlines
-                    .split(/[\n,]+/)        // Split by newline or comma
-                    .map(v => v.trim())
-                    .filter(Boolean);      // Remove empty strings
-                setVendors(vendorsArray.join(', '));
-            }
-        };
-        reader.readAsText(file);
-
-        // Allow re-uploading the same file
-        if (event.target) {
-            event.target.value = '';
-        }
-    };
-
-    const handleSave = () => {
-        if (!benchmark.id || !benchmark.projectName || !benchmark.description) {
-            setError('ID, Project Name, and Description are required.');
-            return;
-        }
-        setError('');
-        const coveredVendors = vendors.split(',').map(v => v.trim()).filter(Boolean);
-        const finalBenchmark: BenchmarkDataset = {
-            id: benchmark.id,
-            projectName: benchmark.projectName,
-            description: benchmark.description,
-            dataVolume: Number(benchmark.dataVolume) || 0,
-            timeliness: benchmark.timeliness || 'Last 3 Months',
-            vendorCount: coveredVendors.length,
-            coveredVendors,
-        };
-        onAction(ActionType.SUBMIT_BENCHMARK_WIZARD, { messageId, benchmark: finalBenchmark });
-    };
-
-    const handleEdit = () => {
-        setIsSaved(false);
-    };
+const TestStarterCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const { config, sopContext, status } = payload;
     
-    const commonInputClass = "mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-gray-800 focus:outline-none focus:ring-teal-600 focus:border-teal-600 sm:text-sm";
-    const disabledClass = isSaved ? "disabled:bg-gray-100/50 disabled:cursor-not-allowed disabled:text-gray-500" : "";
+    if (status === 'submitted') return <div className="text-gray-600 italic">Test submitted...</div>;
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+             onAction(ActionType.RUN_TEST_WITH_FILE, { file: e.target.files[0], config, messageId, sopContext, benchmarkId: 'BM-DEFAULT' });
+        }
+    };
 
     return (
         <div>
-            <h3 className="font-bold text-lg text-gray-900 flex items-center"><AddDatabaseIcon /><span className="ml-2">Add Golden Benchmark</span></h3>
-            <p className="text-gray-600 mt-1">Define a new benchmark dataset for testing and validation.</p>
-            <div className="mt-4 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label htmlFor={`bm-id-${messageId}`} className="block text-sm font-medium text-gray-700">Benchmark ID</label>
-                        <input type="text" id={`bm-id-${messageId}`} value={benchmark.id || ''} onChange={e => handleChange('id', e.target.value)} className={`${commonInputClass} ${disabledClass}`} placeholder="e.g., BM-AV-02" disabled={isSaved} />
+             <h3 className="font-bold text-gray-900 mb-2">Run Test for: {config.projectName}</h3>
+             <div className="grid grid-cols-1 gap-3">
+                 <div className="p-3 border border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors text-center cursor-pointer relative">
+                    <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileUpload} />
+                    <UploadIcon />
+                    <p className="text-sm font-medium text-gray-700 mt-1">Upload Single File</p>
+                    <p className="text-xs text-gray-500">For unit/functional testing</p>
+                 </div>
+                 <div className="p-3 border border-gray-200 rounded-lg bg-white hover:border-teal-400 transition-colors cursor-pointer" onClick={() => onAction(ActionType.START_BATCH_TEST, { path: '/mnt/data/test_batch_01', config, benchmarkId: 'BM-AV-01', sopContext })}>
+                    <div className="flex items-center">
+                        <DatabaseIcon />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-700">Run Batch Regression</p>
+                            <p className="text-xs text-gray-500">Using dataset: BM-AV-01</p>
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor={`bm-project-${messageId}`} className="block text-sm font-medium text-gray-700">Project Name</label>
-                         <select
-                            id={`bm-project-${messageId}`}
-                            value={benchmark.projectName || ''}
-                            onChange={e => handleChange('projectName', e.target.value)}
-                            className={`${commonInputClass} ${disabledClass}`}
-                            disabled={isSaved}
-                        >
-                            <option value="" disabled>Select a project</option>
-                            {projectNames.map(name => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
-                    </div>
+                 </div>
+             </div>
+        </div>
+    );
+};
+
+const TestResultsSummaryCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'] }> = ({ payload, onAction }) => {
+    const { matched, mismatched, testId, project, sopContext } = payload;
+    const total = matched + mismatched;
+    const matchRate = total > 0 ? ((matched / total) * 100).toFixed(1) : 0;
+
+    return (
+        <div>
+            <h3 className="font-bold text-gray-900 mb-3">Test Results: {project}</h3>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-green-50 p-3 rounded-lg border border-green-200 text-center">
+                    <p className="text-2xl font-bold text-green-600">{matched}</p>
+                    <p className="text-xs text-green-800 font-medium uppercase tracking-wide">Matched</p>
                 </div>
-                <div>
-                    <label htmlFor={`bm-desc-${messageId}`} className="block text-sm font-medium text-gray-700">Description</label>
-                    <textarea id={`bm-desc-${messageId}`} value={benchmark.description || ''} onChange={e => handleChange('description', e.target.value)} rows={2} className={`${commonInputClass} ${disabledClass}`} disabled={isSaved}></textarea>
+                 <div className="bg-red-50 p-3 rounded-lg border border-red-200 text-center">
+                    <p className="text-2xl font-bold text-red-600">{mismatched}</p>
+                    <p className="text-xs text-red-800 font-medium uppercase tracking-wide">Mismatched</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label htmlFor={`bm-volume-${messageId}`} className="block text-sm font-medium text-gray-700">Data Volume (Records)</label>
-                        <input type="number" id={`bm-volume-${messageId}`} value={benchmark.dataVolume || ''} onChange={e => handleChange('dataVolume', e.target.value)} className={`${commonInputClass} ${disabledClass}`} placeholder="e.g., 50000" disabled={isSaved} />
-                    </div>
-                     <div>
-                        <label htmlFor={`bm-time-${messageId}`} className="block text-sm font-medium text-gray-700">Timeliness</label>
-                        <select id={`bm-time-${messageId}`} value={benchmark.timeliness || 'Last 3 Months'} onChange={e => handleChange('timeliness', e.target.value as BenchmarkDataset['timeliness'])} className={`${commonInputClass} ${disabledClass}`} disabled={isSaved}>
-                            <option>Last 1 Month</option>
-                            <option>Last 3 Months</option>
-                            <option>Last 6 Months</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <div className="flex justify-between items-center mb-1">
-                        <label htmlFor={`bm-vendors-${messageId}`} className="block text-sm font-medium text-gray-700">Covered Vendors</label>
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="flex items-center text-xs text-teal-800 hover:text-teal-700 font-semibold disabled:text-gray-400 disabled:cursor-not-allowed"
-                            disabled={isSaved}
-                        >
-                            <UploadIcon />
-                            <span className="ml-1">Upload List (.csv, .txt)</span>
-                        </button>
-                    </div>
-                    <input type="file" ref={fileInputRef} onChange={handleVendorFileUpload} className="hidden" accept=".csv,.txt" disabled={isSaved} />
-                    <textarea id={`bm-vendors-${messageId}`} value={vendors} onChange={e => setVendors(e.target.value)} rows={3} className={`${commonInputClass} ${disabledClass}`} placeholder="Enter comma-separated vendor IDs or upload a file..." disabled={isSaved}></textarea>
-                </div>
-                {error && <p className="text-red-600 text-sm">{error}</p>}
             </div>
-             <div className="flex justify-end mt-4">
-                {isSaved ? (
-                    <CardButton onClick={handleEdit} className="bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm">Edit Benchmark</CardButton>
-                ) : (
-                    <CardButton onClick={handleSave}>Save Benchmark</CardButton>
-                )}
+            <div className="mb-4">
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="bg-green-600 h-2.5 rounded-full" style={{ width: `${matchRate}%` }}></div>
+                </div>
+                <p className="text-right text-xs text-gray-500 mt-1">{matchRate}% Success Rate</p>
+            </div>
+            <div className="flex space-x-2">
+                 <CardButton onClick={() => onAction(ActionType.DOWNLOAD_REPORT, { testId })} className="flex-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300">Detailed Report</CardButton>
+                 {mismatched > 0 && (
+                     <CardButton onClick={() => onAction(ActionType.TRIGGER_ANALYSIS, { testId, sopContext })} className="flex-1">Analyze Failures</CardButton>
+                 )}
             </div>
         </div>
     );
 };
 
+const AnalysisResultsCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const { feedbackGiven, sopContext } = payload;
+
+    return (
+        <div>
+             <h3 className="font-bold text-gray-900 flex items-center mb-2"><SparklesIcon /><span className="ml-2">AI Analysis</span></h3>
+             <div className="space-y-3 text-sm text-gray-700">
+                 <p><span className="font-semibold text-red-600">{payload.dataQuality} records</span> failed due to data quality issues (missing fields).</p>
+                 <p><span className="font-semibold text-orange-600">{payload.logic} records</span> failed business logic checks (threshold exceeded).</p>
+             </div>
+             <div className="mt-4 bg-yellow-50 p-3 rounded-md border border-yellow-200">
+                 <p className="text-xs font-bold text-yellow-800 mb-1">Recommendation</p>
+                 <p className="text-sm text-yellow-900">Run a root cause analysis to identify specific vendor patterns.</p>
+             </div>
+             <div className="mt-4 flex justify-between items-center">
+                 {!feedbackGiven ? (
+                    <div className="flex space-x-2">
+                        <button onClick={() => onAction(ActionType.ANALYSIS_FEEDBACK, { messageId, isGood: true })} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-green-500"><ThumbsUpIcon /></button>
+                        <button onClick={() => onAction(ActionType.ANALYSIS_FEEDBACK, { messageId, isGood: false })} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-500"><ThumbsDownIcon /></button>
+                    </div>
+                 ) : <span className="text-xs text-gray-400">Thanks for feedback</span>}
+                 <CardButton onClick={() => onAction(ActionType.INVESTIGATE_ROOT_CAUSE, { sopContext })} className="text-xs">Find Root Cause</CardButton>
+             </div>
+        </div>
+    );
+};
+
+const RootCauseAnalysisCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    return (
+        <div className="space-y-4">
+             <h3 className="font-bold text-gray-900 mb-2">Root Cause Investigation</h3>
+             <div className="p-3 bg-red-50 border-l-4 border-red-500 rounded-r-md">
+                 <h4 className="font-bold text-red-800 text-sm mb-1">Probable Cause Identified</h4>
+                 <p className="text-sm text-red-900">{payload.cause}</p>
+             </div>
+             <div>
+                 <h4 className="font-bold text-gray-700 text-sm mb-2">Suggested Actions</h4>
+                 <div className="space-y-2">
+                     {payload.suggestedActions.map((action: any, idx: number) => (
+                         <button key={idx} onClick={() => onAction(ActionType.SUGGESTED_ACTION, action)} className="w-full text-left p-2 bg-white border border-gray-200 hover:border-teal-400 rounded-md text-sm text-gray-700 flex justify-between group">
+                             <span>{action.title}</span>
+                             <span className="text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+                         </button>
+                     ))}
+                 </div>
+             </div>
+             {!payload.feedbackGiven && (
+                 <div className="flex justify-center space-x-4 pt-2 border-t border-gray-100">
+                    <button onClick={() => onAction(ActionType.ROOT_CAUSE_FEEDBACK, { messageId, isGood: true })} className="text-xs text-gray-500 hover:text-green-600 flex items-center"><ThumbsUpIcon /> <span className="ml-1">Helpful</span></button>
+                    <button onClick={() => onAction(ActionType.ROOT_CAUSE_FEEDBACK, { messageId, isGood: false })} className="text-xs text-gray-500 hover:text-red-600 flex items-center"><ThumbsDownIcon /> <span className="ml-1">Not Helpful</span></button>
+                 </div>
+             )}
+        </div>
+    );
+};
+
+const InteractiveDiagnosticCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const { status, recordId, data } = payload;
+    
+    if (status === 'resolved') return <div className="p-3 bg-green-100 text-green-800 rounded-lg text-sm">Diagnostic for {recordId} completed. Issue resolved.</div>;
+    if (status === 'running') return <div className="p-3 bg-gray-100 text-gray-600 rounded-lg text-sm flex items-center"><LoadingSpinner /> <span className="ml-2">Running diagnostic logic...</span></div>;
+
+    return (
+        <div>
+             <h3 className="font-bold text-gray-900 mb-2">Diagnostic: {recordId}</h3>
+             <div className="bg-gray-50 p-2 rounded-md font-mono text-xs text-gray-700 mb-3 border border-gray-200">
+                 {JSON.stringify(data, null, 2)}
+             </div>
+             <p className="text-sm text-gray-600 mb-3">Does this data look correct compared to the source system?</p>
+             <div className="flex space-x-3">
+                 <CardButton onClick={() => onAction(ActionType.RERUN_DIAGNOSTIC, { messageId, recordId })} className="flex-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50">No, Re-fetch</CardButton>
+                 <CardButton onClick={() => onAction(ActionType.RERUN_DIAGNOSTIC, { messageId, recordId })} className="flex-1">Yes, Run Logic</CardButton>
+             </div>
+        </div>
+    );
+};
+
+const ConfirmationCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'] }> = ({ payload, onAction }) => (
+    <div className="text-center">
+        <ExclamationCircleIcon />
+        <h3 className="font-bold text-gray-900 mt-2 mb-1">Confirm Action</h3>
+        <p className="text-sm text-gray-600 mb-4">Are you sure you want to {payload.action} {payload.project}?</p>
+        <div className="flex justify-center space-x-3">
+            <button onClick={() => onAction(ActionType.CANCEL_ACTION)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md border border-gray-300">Cancel</button>
+            <button onClick={() => onAction(ActionType.CONFIRM_PAUSE_PRODUCTION, payload)} className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md">Confirm</button>
+        </div>
+    </div>
+);
+
+const FileUploadCard: React.FC<{ payload: any, onAction: CardRendererProps['onAction'], messageId: number }> = ({ payload, onAction, messageId }) => {
+    const { status, fileName, result, sopContext } = payload;
+
+    if (status === 'complete') {
+        return (
+            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                 <p className="text-sm text-green-800 font-medium">Upload Complete</p>
+                 <p className="text-xs text-green-700">{result}</p>
+            </div>
+        );
+    }
+
+    if (status === 'uploading' || status === 'processing') {
+         return (
+             <div className="p-4 text-center">
+                 <LoadingSpinner />
+                 <p className="text-sm text-gray-600 mt-2">{status === 'uploading' ? `Uploading ${fileName}...` : 'Processing file...'}</p>
+             </div>
+         );
+    }
+
+    return (
+        <div className="p-6 border-2 border-dashed border-gray-300 rounded-lg text-center bg-gray-50 hover:bg-gray-100 transition-colors relative">
+            <input 
+                type="file" 
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                        onAction(ActionType.UPLOAD_FILE, { file: e.target.files[0], messageId, sopContext });
+                    }
+                }}
+            />
+            <PaperclipIcon />
+            <p className="text-sm font-medium text-gray-700 mt-2">Click or drag file to upload</p>
+            <p className="text-xs text-gray-500">Supports .csv, .xlsx, .json</p>
+        </div>
+    );
+};
 
 export const CardRenderer: React.FC<CardRendererProps> = ({ card, onAction, messageId, allConfigs = [], allTemplates = [], allBenchmarks = [] }) => {
-  const cardMap: { [key in CardType]?: React.ReactNode } = {
-    [CardType.WELCOME]: <WelcomeCard onAction={onAction} />,
-    [CardType.SOP_CHOOSER]: <SopChooserCard onAction={onAction} />,
-    [CardType.CONFIG_CREATOR_CHOOSER]: <ConfigCreatorChooserCard payload={card.payload} onAction={onAction} />,
-    [CardType.TEMPLATE_SELECTOR]: <TemplateSelectorCard payload={card.payload} onAction={onAction} allTemplates={allTemplates} messageId={messageId} />,
-    [CardType.CONFIG_SELECTOR]: <ConfigSelectorCard payload={card.payload} onAction={onAction} allConfigs={allConfigs} messageId={messageId} />,
-    [CardType.CONFIG_WIZARD]: <ConfigWizardCard payload={card.payload} onAction={onAction} messageId={messageId}/>,
-    [CardType.CONFIG_DETAILS]: <ConfigDetailsCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.TEST_STARTER]: <TestStarterCard payload={card.payload} onAction={onAction} messageId={messageId} allBenchmarks={allBenchmarks || []} />,
-    [CardType.TEST_RESULTS_SUMMARY]: <TestResultsSummaryCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.ANALYSIS_RESULTS]: <AnalysisResultsCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.ROOT_CAUSE_ANALYSIS]: <RootCauseAnalysisCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.INTERACTIVE_DIAGNOSTIC]: <InteractiveDiagnosticCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.CONFIRMATION]: <ConfirmationCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.ALERT]: <AlertCard payload={card.payload} />,
-    [CardType.FILE_UPLOAD]: <FileUploadCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.BENCHMARK_LIST]: <BenchmarkListCard payload={card.payload} onAction={onAction} />,
-    [CardType.JSON_IMPORTER]: <JsonImporterCard onAction={onAction} messageId={messageId} />,
-    [CardType.TEMPLATE_EDITOR]: <TemplateEditorCard payload={card.payload} onAction={onAction} messageId={messageId} />,
-    [CardType.BENCHMARK_WIZARD]: <BenchmarkWizardCard payload={card.payload} onAction={onAction} messageId={messageId} allConfigs={allConfigs} />,
-  };
+    const commonProps = { onAction, messageId };
 
-  const Component = cardMap[card.type];
-  const sopContext = card.payload?.sopContext;
+    if (card.payload?.sopContext) {
+        return (
+            <div>
+                 <SopTimeline 
+                    sopType={card.payload.sopContext.sopType}
+                    sopTitle={card.payload.sopContext.sopTitle}
+                    currentStep={card.payload.sopContext.currentStep}
+                    onAction={onAction}
+                    sopContext={card.payload.sopContext}
+                />
+                <div className="mt-4 border-t border-gray-200 pt-4">
+                     {renderCardContent(card, commonProps, allConfigs, allTemplates, allBenchmarks)}
+                </div>
+            </div>
+        );
+    }
 
-  if (!Component) {
-    return <div className="text-red-500">Error: Unknown card type "{card.type}"</div>;
-  }
+    return renderCardContent(card, commonProps, allConfigs, allTemplates, allBenchmarks);
+};
 
-  return (
-    <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-      {sopContext && <SopTimeline {...sopContext} onAction={onAction} sopContext={sopContext} />}
-      {Component}
-    </div>
-  );
+const renderCardContent = (card: Card, commonProps: any, allConfigs: Configuration[], allTemplates: ConfigTemplate[], allBenchmarks: BenchmarkDataset[]) => {
+    switch (card.type) {
+        case CardType.WELCOME:
+            return <WelcomeCard onAction={commonProps.onAction} />;
+        case CardType.SOP_CHOOSER:
+            return <SopChooserCard onAction={commonProps.onAction} />;
+        case CardType.CONFIG_CREATOR_CHOOSER:
+            return <ConfigCreatorChooserCard payload={card.payload} onAction={commonProps.onAction} />;
+        case CardType.TEMPLATE_SELECTOR:
+            return <TemplateSelectorCard payload={card.payload} allTemplates={allTemplates} {...commonProps} />;
+        case CardType.CONFIG_SELECTOR:
+            return <ConfigSelectorCard payload={card.payload} allConfigs={allConfigs} {...commonProps} />;
+        case CardType.CONFIG_WIZARD:
+            return <ConfigWizardCard payload={card.payload} {...commonProps} />;
+        case CardType.CONFIG_DETAILS:
+            return <ConfigDetailsCard payload={card.payload} />;
+        case CardType.JSON_IMPORTER:
+             return <JsonImporterCard payload={card.payload} {...commonProps} />;
+        case CardType.TEMPLATE_EDITOR:
+             return <TemplateEditorCard payload={card.payload} {...commonProps} />;
+        case CardType.BENCHMARK_WIZARD:
+             return <BenchmarkWizardCard payload={card.payload} {...commonProps} />;
+        case CardType.BENCHMARK_LIST:
+             return <BenchmarkListCard payload={card.payload} />;
+        case CardType.TEST_STARTER:
+            return <TestStarterCard payload={card.payload} {...commonProps} />;
+        case CardType.TEST_RESULTS_SUMMARY:
+            return <TestResultsSummaryCard payload={card.payload} onAction={commonProps.onAction} />;
+        case CardType.ANALYSIS_RESULTS:
+            return <AnalysisResultsCard payload={card.payload} {...commonProps} />;
+        case CardType.ROOT_CAUSE_ANALYSIS:
+            return <RootCauseAnalysisCard payload={card.payload} {...commonProps} />;
+        case CardType.INTERACTIVE_DIAGNOSTIC:
+            return <InteractiveDiagnosticCard payload={card.payload} {...commonProps} />;
+        case CardType.CONFIRMATION:
+            return <ConfirmationCard payload={card.payload} onAction={commonProps.onAction} />;
+        case CardType.FILE_UPLOAD:
+            return <FileUploadCard payload={card.payload} {...commonProps} />;
+        case CardType.BIZ_RULES_DOMAIN_SELECTOR:
+            return <BizRuleDomainSelector {...commonProps} />;
+        case CardType.GENERATIVE_BIZ_RULES_MANAGER:
+            return <GenerativeBizRulesCard payload={card.payload} {...commonProps} />;
+        case CardType.PART_CATALOG_RULES_MANAGER:
+            return <PartCatalogRulesCard payload={card.payload} {...commonProps} />;
+        default:
+            return <div className="text-red-500 text-sm">Unknown card type: {card.type}</div>;
+    }
 };

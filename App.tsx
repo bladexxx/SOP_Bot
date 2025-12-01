@@ -1,17 +1,23 @@
 
 
+
+
+
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel, KnowledgeFile } from './types';
+import { Message, Actor, CardType, ActionType, Configuration, BenchmarkDataset, ConfigTemplate, Flashcard, AppSettings, GeminiModel, KnowledgeFile, BusinessRule, RuleSchema } from './types';
 import { CardRenderer } from './components/CardRenderer';
 import { BotIcon, UserIcon, SendIcon, PaperclipIcon, LoadingSpinner, SearchIcon, SparklesIcon, GeminiIcon, PlayCircleIcon, XIcon, XCircleIcon, InformationCircleIcon, SettingsIcon, LightBulbIcon } from './components/Icons';
 import { FlashcardModal } from './components/FlashcardModal';
 import { DemoGuideModal } from './components/DemoGuideModal';
 import { SettingsModal } from './components/SettingsModal';
-import { generateContentFromPrompt, generateFlashcardsFromText } from './services/aiService';
+import { generateContentFromPrompt, generateFlashcardsFromText, generateRuleSchema } from './services/aiService';
 import { triggerNiFiFlow } from './services/nifiService';
 import { sopDefinitions } from './components/SopTimeline';
+import { Card } from './types'; // Import Card from types
 
 const mockConfigsData: Configuration[] = [
   {
@@ -199,6 +205,18 @@ const mockFlashcards: Flashcard[] = [
     }
 ];
 
+const mockBusinessRules: BusinessRule[] = [
+    {
+        id: 'RULE-101',
+        domain: 'Billing',
+        payload: {
+            ruleName: 'High Value Transaction',
+            minAmount: 10000,
+            approverRole: 'Senior Manager'
+        }
+    }
+];
+
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -239,7 +257,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, version, name,
   );
 };
 
-const APP_VERSION = '1.4';
+const APP_VERSION = '1.6';
 const SETTINGS_STORAGE_KEY = 'flowx-sop-bot-settings';
 const KNOWLEDGE_FILES_STORAGE_KEY = 'flowx-sop-bot-knowledge-files';
 const GENERATED_FLASHCARDS_STORAGE_KEY = 'flowx-sop-bot-generated-flashcards';
@@ -298,6 +316,8 @@ const App: React.FC = () => {
     const [configs, setConfigs] = useState<Configuration[]>(mockConfigsData);
     const [templates, setTemplates] = useState<ConfigTemplate[]>(mockTemplatesData);
     const [benchmarks, setBenchmarks] = useState<BenchmarkDataset[]>(mockBenchmarkDatasets);
+    const [businessRules, setBusinessRules] = useState<BusinessRule[]>(mockBusinessRules);
+
 
     const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>(() => {
         try {
@@ -432,8 +452,11 @@ const App: React.FC = () => {
                     ...msg,
                     card: {
                         ...msg.card,
-                        payload: newPayload
-                    }
+                        payload: {
+                            ...msg.card.payload,
+                            ...newPayload
+                        }
+                    } as Card
                 };
             }
             return msg;
@@ -648,6 +671,7 @@ const App: React.FC = () => {
             const context = `
                 AVAILABLE CONFIGURATIONS: ${JSON.stringify(configs, null, 2)}
                 AVAILABLE BENCHMARKS: ${JSON.stringify(benchmarks, null, 2)}
+                BUSINESS RULES: ${JSON.stringify(businessRules, null, 2)}
                 CONVERSATION HISTORY (last 10): ${messages.slice(-10).map(m => `${m.actor === Actor.BOT ? 'BOT' : 'USER'}: ${m.content || '(Interactive Card)'}`).join('\n')}
                 ${knowledgeBaseText ? `--- \nUSER-PROVIDED KNOWLEDGE BASE:\n${knowledgeBaseText}` : ''}
             `;
@@ -796,6 +820,53 @@ const App: React.FC = () => {
         };
 
         switch(action) {
+            case ActionType.SHOW_BIZ_RULES:
+                addMessage({ actor: Actor.USER, content: "Manage Business Rules" });
+                addMessage({ actor: Actor.BOT, card: { type: CardType.BIZ_RULES_DOMAIN_SELECTOR } });
+                break;
+            case ActionType.SELECT_BIZ_RULE_DOMAIN:
+                 addMessage({ actor: Actor.USER, content: `Select Domain: ${payload.domain}` });
+                 
+                 let cardType = CardType.GENERATIVE_BIZ_RULES_MANAGER;
+                 if (payload.domain === 'Part Catalog(MDT)') {
+                     cardType = CardType.PART_CATALOG_RULES_MANAGER;
+                 }
+
+                 addMessage({ 
+                     actor: Actor.BOT, 
+                     card: { 
+                         type: cardType, 
+                         payload: { 
+                             domain: payload.domain,
+                             rules: businessRules
+                         } 
+                    } 
+                });
+                break;
+            case ActionType.GENERATE_RULE_SCHEMA:
+                 try {
+                     const schema: RuleSchema = await generateRuleSchema(payload.domain, payload.intentText, appSettings.geminiModel);
+                     updateCardInMessage(payload.messageId, { schema: schema });
+                 } catch (e) {
+                     addMessage({ actor: Actor.BOT, content: "Sorry, I encountered an error generating the UI. Please try again." });
+                 }
+                 break;
+            case ActionType.SAVE_BIZ_RULE:
+                const savedRule = payload.rule as BusinessRule;
+                setBusinessRules(prev => [...prev, savedRule]);
+                // Update existing card to show new rule in list
+                 updateCardInMessage(payload.messageId, {
+                    rules: [...businessRules, savedRule] 
+                });
+                addMessage({ actor: Actor.BOT, content: `Rule saved successfully.` });
+                break;
+            case ActionType.DELETE_BIZ_RULE:
+                const ruleIdToDelete = payload.ruleId;
+                const newRules = businessRules.filter(r => r.id !== ruleIdToDelete);
+                setBusinessRules(newRules);
+                updateCardInMessage(payload.messageId, { rules: newRules });
+                addMessage({ actor: Actor.BOT, content: "Business rule deleted." });
+                break;
             case ActionType.SHOW_BENCHMARK_WIZARD:
                 addMessage({ actor: Actor.USER, content: "Add new Golden Benchmark" });
                 addMessage({ actor: Actor.BOT, card: { type: CardType.BENCHMARK_WIZARD, payload: { projectName: payload?.projectName } } });
@@ -1219,7 +1290,7 @@ const App: React.FC = () => {
         }
 
         setIsLoading(false);
-    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, appSettings]);
+    }, [addMessage, updateCardInMessage, triggerSopStep, messages, configs, benchmarks, templates, setIsFlashcardModalOpen, appSettings, businessRules]);
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();

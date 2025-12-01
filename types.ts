@@ -1,3 +1,4 @@
+
 export enum Actor {
   USER = 'user',
   BOT = 'bot',
@@ -23,6 +24,9 @@ export enum CardType {
   JSON_IMPORTER = 'json_importer',
   TEMPLATE_EDITOR = 'template_editor',
   BENCHMARK_WIZARD = 'benchmark_wizard',
+  BIZ_RULES_DOMAIN_SELECTOR = 'biz_rules_domain_selector',
+  GENERATIVE_BIZ_RULES_MANAGER = 'generative_biz_rules_manager',
+  PART_CATALOG_RULES_MANAGER = 'part_catalog_rules_manager',
 }
 
 export enum ActionType {
@@ -62,6 +66,11 @@ export enum ActionType {
     SAVE_GENERATED_TEMPLATE = 'save_generated_template',
     SHOW_BENCHMARK_WIZARD = 'show_benchmark_wizard',
     SUBMIT_BENCHMARK_WIZARD = 'submit_benchmark_wizard',
+    SHOW_BIZ_RULES = 'show_biz_rules',
+    SELECT_BIZ_RULE_DOMAIN = 'select_biz_rule_domain',
+    GENERATE_RULE_SCHEMA = 'generate_rule_schema',
+    SAVE_BIZ_RULE = 'save_biz_rule',
+    DELETE_BIZ_RULE = 'delete_biz_rule',
 }
 
 export interface Message {
@@ -120,6 +129,28 @@ export interface KnowledgeFile {
   name: string;
   content: string;
 }
+
+// Generative UI Types
+export interface SchemaField {
+    key: string;
+    label: string;
+    type: 'string' | 'number' | 'boolean' | 'select';
+    options?: string[]; // For select type
+    placeholder?: string;
+}
+
+export interface RuleSchema {
+    domain: string;
+    fields: SchemaField[];
+}
+
+export interface BusinessRule {
+    id: string;
+    domain: string;
+    payload: Record<string, any>;
+}
+
+export type BizRuleDomain = 'Part Catalog(MDT)' | 'ETA(EMT)' | 'Billing' | 'POCV' | 'Vouch';
 
 export type GeminiModel = 'gemini-2.0-flash' | 'gemini-2.5-flash' | 'gemini-2.5-pro';
 
